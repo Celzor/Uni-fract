@@ -130,9 +130,9 @@ export function playCheck(table, playerId, hand, card) {
       && hand.some((other) => other !== card && colorOf(other) === table.color)) return null;
     return { jumpIn: false };
   }
-  // Jump-in: an identical coloured card, out of turn, never onto your own play.
+  // Jump-in: an identical coloured card, including a second copy of your own play.
   if (!table.settings.jumpIn || top === null || isWild(card) || faceOf(card) !== faceOf(top)) return null;
-  if (!table.seats.includes(playerId) || table.lastPlay?.by === playerId) return null;
+  if (!table.seats.includes(playerId)) return null;
   return { jumpIn: true };
 }
 

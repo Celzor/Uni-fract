@@ -206,6 +206,34 @@ test('a guest can jump in out of turn', () => {
   assert.fail('no jump-in opportunity arose');
 });
 
+test('a guest can jump in on their own identical card through the host', () => {
+  const net = network([1, 2, 3]);
+  const table = playing({
+    hands: [['r1', 'g2'], ['r5', 'r5', 'b6', 'g8'], ['r9', 'b1']], current: 2,
+  });
+  restorePosition(net, table);
+  const [first, duplicate] = table.hands[1];
+  const sentAt = net.sent.length;
+
+  net.act(2, { type: 'play', card: first });
+  assert.equal(net.game(2).current, 3, 'the first card passes the turn to another player');
+  assert.ok(choicesFor(net.game(2), 2, net.game(2).hand).jumpIns.includes(duplicate),
+    'the guest sees its remaining duplicate as a jump-in');
+
+  net.act(2, { type: 'play', card: duplicate });
+  for (const id of net.members) {
+    assert.deepEqual(net.game(id).lastPlay, { by: 2, card: duplicate, jumpIn: true });
+    assert.ok(net.game(id).log.some((entry) => entry.k === 'play' && entry.by === 2
+      && entry.card === duplicate && entry.jump === true));
+  }
+  assert.deepEqual(net.game(2).hand, table.hands[1].slice(2), 'both physical copies leave the guest hand');
+  assert.equal(net.game(1).current, 3);
+  assert.equal(net.game(1).turnSeq, table.turnSeq + 2);
+  assert.equal(net.sent.slice(sentAt).filter(({ from, data }) => from === 2 && data.kind === 'action').length, 2);
+  assert.ok(isValidTable(net.hostTable()));
+  net.assertConverged();
+});
+
 test('stale and malformed packets never change the game', () => {
   const net = network([1, 2, 3]);
   deal(net);
