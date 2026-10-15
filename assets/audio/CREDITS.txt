@@ -11,10 +11,92 @@ turn.wav     Audio/select_001.ogg
 play.wav     Audio/pluck_001.ogg
 draw.wav     Audio/pluck_002.ogg
 call.wav     Audio/bong_001.ogg
-win.wav      Audio/confirmation_003.ogg
+win.wav      Audio/pluck_001.ogg (new rising round-win arrangement)
+match-win.wav Audio/pluck_001.ogg (new longer match-win arrangement)
 deal.wav     Audio/drop_001.ogg
+impact.wav   Audio/bong_001.ogg + Audio/scratch_005.ogg (+4 low impact)
+stack.wav    Audio/bong_001.ogg + Audio/scratch_001.ogg (+2 lighter impact)
 
-Adapted for this game: converted to mono 44.1 kHz 16-bit PCM WAV,
+Regular cues: converted to mono 44.1 kHz 16-bit PCM WAV,
 low-pass filtered at 3.5 kHz, with a 3 ms fade-in and 15 ms fade-out.
 Playback gain is reduced further by the game's sound controller.
 These assets are bundled locally; no external audio service is used.
+
+Celebrations are original arrangements of the same CC0 pluck_001.ogg,
+using ascending major arpeggios and a final four-note chord. No additional
+recordings or licensed music were used. Reproduction details (FFmpeg):
+
+1. Decode pluck_001.ogg and apply aformat=channel_layouts=mono. Split one
+   copy per note. Each note is (start milliseconds, semitone shift, gain).
+
+   win.wav (1.75 seconds):
+   (0,-12,.90), (160,-8,.90), (320,-5,.90), (510,0,.88), (700,4,.86),
+   (900,7,.84), (1120,0,.44), (1120,4,.44), (1120,7,.44), (1120,12,.30)
+
+   match-win.wav (2.20 seconds):
+   (0,-12,.90), (120,-8,.90), (240,-5,.90), (400,0,.88), (560,4,.86),
+   (720,7,.84), (900,12,.78), (1020,7,.78), (1140,4,.78), (1300,12,.84),
+   (1510,0,.45), (1510,4,.45), (1510,7,.45), (1510,12,.34)
+
+2. For each note, set RATE = round(44100 * 2^(semitone shift / 12)),
+   GAIN = note gain, DELAY = start milliseconds, and apply this filter:
+   asetrate=RATE,aresample=44100,lowpass=f=3500,afade=t=in:d=0.003,
+   areverse,afade=t=in:d=0.015,areverse,
+   aecho=0.8:0.6:95|190|285:0.24|0.12|0.06,volume=GAIN,adelay=DELAY:all=1
+
+3. Mix with amix=inputs=NOTE_COUNT:normalize=0,apad,atrim=duration=DURATION,
+   afade=t=out:st=FADE_START:d=0.18, where FADE_START = DURATION - 0.18.
+   Render mono float32 at 44100 Hz. Normalize to absolute peak 0.72
+   (both current renders use volume=1.624332308769), then encode as
+   16-bit PCM WAV. This leaves headroom and a soft tail without clipping.
+
+4. Game playback volume: win 0.34, match-win 0.36. Regular cue gains are
+   unchanged (0.22-0.28). New ordinary cues cannot cut a celebration short;
+   mute, updates while hidden, disconnect, reset and teardown stop playback.
+
+Draw-card impacts are also original CC0 arrangements, with a reversed,
+filtered scratch building into a pitched-down bong. The bass impact peaks
+at 0.506 seconds for +4 and 0.365 seconds for +2, to follow the card flight.
+Both have mono 44100 Hz, 16-bit PCM output and absolute peak 0.72.
+
+Reproduction parameters:
+                     impact.wav              stack.wav
+Duration             1.05 seconds            0.65 seconds
+Air source           scratch_005.ogg         scratch_001.ogg
+BODY_RATE            24255                   35280
+AIR_RATE             26460                   17640
+AIR_LOWPASS          1800                    2300
+BODY_GAIN            0.72                    0.62
+AIR_GAIN             0.24                    0.18
+BODY_DELAY_MS        500                     360
+AIR_RISE_SECONDS     0.40                    0.28
+AIR_FALL_START       0.44                    0.278
+AIR_FALL_SECONDS     0.10                    0.07
+ECHO_DELAYS          85|170|255              60|120
+ECHO_DECAYS          0.24|0.12|0.06          0.18|0.08
+Final normalization  2.171262025833          2.533755302429
+
+Apply to bong_001.ogg:
+aformat=channel_layouts=mono,asetrate=BODY_RATE,aresample=44100,
+highpass=f=45,lowpass=f=900,afade=t=in:d=0.006,
+areverse,afade=t=in:d=0.040,areverse,
+aecho=0.8:0.7:ECHO_DELAYS:ECHO_DECAYS,volume=BODY_GAIN,
+adelay=BODY_DELAY_MS:all=1,asetpts=N/SR/TB
+
+Apply to the air source:
+aformat=channel_layouts=mono,asetrate=AIR_RATE,aresample=44100,
+highpass=f=160,lowpass=f=AIR_LOWPASS,areverse,asetpts=N/SR/TB,
+afade=t=in:d=AIR_RISE_SECONDS,
+afade=t=out:st=AIR_FALL_START:d=AIR_FALL_SECONDS,volume=AIR_GAIN
+
+Mix the two tracks with amix=inputs=2:normalize=0, then
+apad=whole_len=COUNT,atrim=end_sample=COUNT,asetpts=N/SR/TB,
+afade=t=out:st=FADE_START:d=0.13
+where COUNT = round(duration * 44100) and FADE_START = duration - 0.13.
+Render float32, apply the final normalization above, and encode PCM WAV.
+
+Playback uses 0.34 volume for +4 and 0.30 for +2. Each additional card
+owed in the stack adds 0.004 volume (maximum extra 0.04) and reduces
+playbackRate by 0.01 (minimum 0.86, preservesPitch=false). Weight resets
+for a new unstacked card. Impacts outrank turn cues, fresh stacked cards
+can replace the preceding impact, and celebrations outrank every impact.

@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 600" role="img" aria-label="Red 0">
+  <rect width="400" height="600" rx="13" fill="#fffef9"/>
+  <path d="M31 24C130 34 255 24 369 34C360 204 353 375 370 566C261 561 142 581 29 565C43 406 25 224 34 55Z" fill="none" stroke="#b13e35" stroke-width="7" stroke-linejoin="round" stroke-linecap="round"/>
+  <path d="M36 28C142 40 258 30 364 38M35 562C153 574 267 557 366 561" fill="none" stroke="#c87564" stroke-width="2" opacity=".65"/>
+  <g fill="#b13e35" font-family="Segoe Print, Comic Sans MS, cursive" font-weight="700">
+    <text x="48" y="81" font-size="31" transform="rotate(-4 48 81)">No No</text>
+    <text x="352" y="87" font-size="45" text-anchor="end" transform="rotate(4 352 87)">R0</text>
+    <text x="49" y="548" font-size="45" transform="rotate(-4 49 548)">R0</text>
+    <text x="352" y="548" font-size="31" text-anchor="end" transform="rotate(3 352 548)">No No</text>
+
+  </g>
+  <g fill="none" stroke="#b13e35" stroke-width="11" stroke-linecap="round" stroke-linejoin="round" transform="rotate(-3 200 300)"><path d="M207 169C120 158 111 246 115 305C119 396 146 438 202 435C267 432 288 356 284 288C279 205 258 169 207 169Z"/></g>
+</svg>

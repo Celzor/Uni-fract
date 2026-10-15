@@ -71,9 +71,15 @@ The host sets these in the lobby, or between rounds.
 
 Always on: Skip skips the next player; Reverse flips direction (with two players it acts as a Skip); Draw Two and Wild Draw Four make the next player draw and lose their turn unless they can stack or challenge. A drawn card that can be played may be played straight away or kept. Rounds open on a number card, and the first player rotates each round. When the draw pile runs out, the discards are reshuffled under the top card.
 
+If you have no legal card, the table draws for you after a short pause (normally one second, with extra time to catch a missed “Oh no!”). This also takes an unanswered draw stack automatically. A challengeable +4 still waits for your choice to challenge or take the cards. The host controls automatic draws in multiplayer, so cards are only drawn once.
+
 Keyboard: **D** draw, **O** shout “Oh no!”, **C** catch, **K** keep.
 
 Sound uses short, quiet cues for turns, playing and drawing cards, dealing, calls, and round wins. **Sound on / off** mutes every effect and remembers your preference. Only one cue plays at a time; repeated multiplayer snapshots do not replay sounds.
+
+Cards swoop between hands and piles individually. Draw Fours land with a heavier impact; stacked penalties show a floating total counting up. Round and match wins have a fanfare and confetti. Motion respects your system’s reduced-motion preference.
+
+Players sit around the felt, with your own seat beside your hand. Refract profile pictures appear when available, with initials as a fallback. Every card in your hand glows gently on your turn; playable cards lift up. The draw control sits below the deck, with space reserved so turn changes keep the table steady.
 
 ## How the integration works
 
@@ -108,12 +114,17 @@ This is a cooperative casual-game protocol, not an anti-cheat service: the host�
 | [`src/bots.js`](src/bots.js) | Computer players: move choice and the driver that plays them for the host |
 | [`src/local.js`](src/local.js) | The offline practice table |
 | [`src/bridge.js`](src/bridge.js) | Refract postMessage boundary |
+| [`src/avatars.js`](src/avatars.js) | Refract profile pictures and fallback initials |
 | [`src/app.js`](src/app.js) | UI and wiring for both modes |
 | [`src/audio.js`](src/audio.js) | Quiet sound cues, event deduplication, and mute control |
+| [`src/auto-draw.js`](src/auto-draw.js) | Host-controlled draws when a human has no playable card |
+| [`src/effects.js`](src/effects.js) | Card flights, draw-stack impacts and tallies, and celebrations |
 | [`tools/preview.html`](tools/preview.html) | Multi-frame Refract protocol simulator |
 | [`tests/`](tests/) | Rules, randomized whole-game play, synchronization, bots, bridge, page markup, and static-serving checks |
 
 Card art lives in [`assets/cards`](assets/cards), named by face: colour `r`/`y`/`g`/`b` followed by `0`–`9`, `s` (skip), `r` (reverse) or `d2`, plus `w` and `wd4`.
+
+All 54 faces use matching editable SVGs: cream paper, handwritten strokes, readable coloured inks, and four-colour wild symbols. Yellow keeps its dark ochre design. The source drawing commands are in [`tools/redraw-cards.js`](tools/redraw-cards.js); run `node tools/redraw-cards.js` to regenerate the deck. The older `node tools/redraw-yellow.js` command still regenerates only the yellow faces.
 
 ## Development checks
 

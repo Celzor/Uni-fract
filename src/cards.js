@@ -29,7 +29,7 @@ export const colorOf = (card) => (isWild(card) ? null : FACES[card][0]);
 export const rankOf = (card) => (isWild(card) ? FACES[card] : FACES[card].slice(1));
 export const isNumber = (card) => /^\d$/.test(rankOf(card));
 export const drawAmount = (card) => ({ d2: 2, wd4: 4 })[rankOf(card)] ?? 0;
-export const cardImage = (card) => `assets/cards/${FACES[card]}.png`;
+export const cardImage = (card) => `assets/cards/${FACES[card]}.svg`;
 
 /** Classic scoring: face value for numbers, 20 for actions, 50 for wilds. */
 export function points(card) {

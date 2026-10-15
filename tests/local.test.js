@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { MAX_BOTS, choicesFor, isValidView } from '../src/rules.js';
 import { HUMAN_ID, createLocalGame } from '../src/local.js';
+import { AUTO_DRAW_DELAY_MS } from '../src/auto-draw.js';
 import { fakeTimers, seeded } from './helpers.js';
 
 function practice({ bots = 3, seed = 5 } = {}) {
@@ -79,4 +80,27 @@ test('the number of computer players is a house rule, fixed during a round', () 
   game.act({ type: 'settings', settings: { bots: 2 } });
   assert.deepEqual(h.state.view.seats, [HUMAN_ID, -1, -2]);
   game.destroy();
+});
+
+test('practice automatically draws a stuck hand, and abandoning or destroying cancels it', () => {
+  for (const finish of ['draw', 'abandon', 'destroy']) {
+    const h = practice({ bots: 1, seed: 41 });
+    h.game.act({ type: 'settings', settings: { turnTimer: 0, jumpIn: false } });
+    h.game.act({ type: 'deal' });
+    const before = h.state.view;
+    assert.equal(before.current, HUMAN_ID);
+    assert.equal(choicesFor(before, HUMAN_ID, before.hand).playable.length, 0);
+    h.timers.advance(AUTO_DRAW_DELAY_MS - 1);
+    assert.equal(h.state.view.revision, before.revision);
+    if (finish === 'abandon') h.game.abandon();
+    if (finish === 'destroy') h.game.destroy();
+    h.timers.advance(1);
+    if (finish === 'draw') {
+      assert.equal(h.state.view.hand.length, before.hand.length + 1);
+      assert.ok(h.state.view.log.some((entry) => entry.k === 'draw' && entry.by === HUMAN_ID));
+    } else if (finish === 'abandon') assert.equal(h.state.view.phase, 'lobby');
+    else assert.equal(h.state.view.revision, before.revision);
+    h.game.destroy();
+    assert.equal(h.timers.pending, 0);
+  }
 });

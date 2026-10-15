@@ -12,7 +12,7 @@ const PHASES = Object.freeze(['lobby', 'playing', 'roundOver']);
  * Computer players use negative ids, so they can never collide with Refract
  * user ids. The coordinating copy plays their turns.
  */
-export const BOT_NAMES = Object.freeze(['Prism', 'Lumen', 'Halo', 'Glint', 'Spectra']);
+export const BOT_NAMES = Object.freeze(['Al Lunar', 'Al Gore', 'Al Dusty', 'Al Pudding', 'Al Bert']);
 export const MAX_BOTS = BOT_NAMES.length;
 export const isBotId = (id) => Number.isSafeInteger(id) && id < 0 && id >= -MAX_BOTS;
 export const botIds = (settings) => Array.from({ length: settings.bots }, (_, index) => -(index + 1));

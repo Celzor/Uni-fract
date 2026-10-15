@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createGameAudio } from '../src/audio.js';
 import { applyAction, viewFor } from '../src/rules.js';
-import { playing } from './helpers.js';
+import { cardPicker, playing } from './helpers.js';
 
 function audio(options = {}) {
   const played = [];
@@ -11,10 +11,11 @@ function audio(options = {}) {
   const controller = createGameAudio({
     createAudio(src) {
       const sound = {
-        src, currentTime: 0, volume: 1, paused: true,
+        src, currentTime: 0, volume: 1, paused: true, ended: false,
         play() {
           assert.ok(media.every((other) => other === this || other.paused), 'sounds never overlap');
           this.paused = false;
+          this.ended = false;
           played.push(src.split('/').at(-1));
           return Promise.resolve();
         },
@@ -82,6 +83,138 @@ test('turn and win cues take priority over card effects without layering', () =>
   ] }), 1);
   assert.deepEqual(h.played, ['turn.wav', 'win.wav']);
   assert.equal(h.media[0].paused, true);
+});
+
+test('draw cards land distinct impacts ahead of turn nudges and automatic takes', () => {
+  const h = audio();
+  const { take } = cardPicker();
+  h.controller.update(snapshot(), 1);
+  const four = snapshot({ revision: 2, current: 1, turnNo: 2, pendingDraw: 4,
+    log: [{ seq: 1, k: 'play', card: take('wd4') }] });
+  h.controller.update(four, 1);
+  assert.deepEqual(h.played, ['impact.wav']);
+  h.controller.update({ ...four, revision: 3, pendingDraw: 0,
+    log: [...four.log, { seq: 2, k: 'take', n: 4 }] }, 1);
+  assert.deepEqual(h.played, ['impact.wav'], 'automatic collection cannot cut off the impact');
+  const two = snapshot({ revision: 4, current: 1, turnNo: 3, pendingDraw: 2,
+    log: [...four.log, { seq: 2, k: 'take', n: 4 }, { seq: 3, k: 'play', card: take('rd2') }] });
+  h.controller.update(two, 1);
+  assert.deepEqual(h.played, ['impact.wav', 'stack.wav'], 'a new draw-two lands even over a previous draw-four');
+});
+
+test('stack weight grows within comfortable limits and resets for the next unstacked card', () => {
+  const h = audio();
+  const { take } = cardPicker();
+  let view = snapshot();
+  h.controller.update(view, 1);
+  const land = (pendingDraw) => {
+    view = { ...view, revision: view.revision + 1, pendingDraw,
+      log: [...view.log, { seq: view.log.length + 1, k: 'play', card: take('wd4') }] };
+    h.controller.update(view, 1);
+    return h.media.find((sound) => sound.src.endsWith('/impact.wav'));
+  };
+  const first = land(4);
+  const initialRate = first.playbackRate;
+  const initialVolume = first.volume;
+  land(8);
+  assert.ok(first.playbackRate < initialRate);
+  assert.ok(first.volume > initialVolume);
+  assert.equal(first.preservesPitch, false);
+  land(32);
+  assert.ok(first.playbackRate >= 0.86);
+  assert.ok(first.volume <= 0.38);
+  land(4);
+  assert.equal(first.playbackRate, initialRate);
+  assert.equal(first.volume, initialVolume);
+  assert.deepEqual(h.played, ['impact.wav', 'impact.wav', 'impact.wav', 'impact.wav']);
+});
+
+test('stack impacts never replay on snapshots, reconnect, unmute or a lower-revision sync', () => {
+  const h = audio();
+  const { take } = cardPicker();
+  const first = snapshot({ revision: 5, pendingDraw: 4, log: [{ seq: 4, k: 'play', card: take('wd4') }] });
+  h.controller.update(first, 1);
+  assert.deepEqual(h.played, []);
+  const stacked = { ...first, revision: 6, pendingDraw: 8,
+    log: [...first.log, { seq: 5, k: 'play', card: take('wd4') }] };
+  h.controller.update(stacked, 1);
+  h.controller.update(structuredClone(stacked), 1);
+  h.controller.update(null, 1);
+  h.controller.update(structuredClone(stacked), 1);
+  h.controller.setEnabled(false);
+  const muted = { ...stacked, revision: 7, pendingDraw: 10,
+    log: [...stacked.log, { seq: 6, k: 'play', card: take('rd2') }] };
+  h.controller.update(muted, 1);
+  h.controller.setEnabled(true);
+  h.controller.update(muted, 1);
+  h.controller.update(first, 1);
+  assert.deepEqual(h.played, ['impact.wav']);
+});
+
+test('a draw-four finishing the round selects the fanfare and further impacts cannot interrupt it', () => {
+  const h = audio();
+  const { take } = cardPicker();
+  h.controller.update(snapshot(), 1);
+  const finished = snapshot({ revision: 2, phase: 'roundOver', log: [
+    { seq: 1, k: 'play', card: take('wd4') }, { seq: 2, k: 'take', n: 4 }, { seq: 3, k: 'win' },
+  ] });
+  h.controller.update(finished, 1);
+  h.controller.update({ ...finished, revision: 3, phase: 'playing', round: 2, pendingDraw: 4,
+    log: [...finished.log, { seq: 4, k: 'play', card: take('wd4') }] }, 1);
+  assert.deepEqual(h.played, ['win.wav']);
+  assert.equal(h.media[0].paused, false);
+});
+
+test('round fanfare finishes over new-hand cues without queuing a backlog', () => {
+  const h = audio();
+  h.controller.update(snapshot(), 1);
+  const finished = snapshot({ revision: 2, phase: 'roundOver', log: [{ seq: 1, k: 'win' }] });
+  h.controller.update(finished, 1);
+  const fanfare = h.media[0];
+  assert.equal(fanfare.volume, 0.34);
+  const nextRound = snapshot({ revision: 3, round: 2, current: 1, log: [...finished.log, { seq: 2, k: 'deal' }] });
+  h.controller.update(nextRound, 1);
+  const call = { ...nextRound, revision: 4, log: [...nextRound.log, { seq: 3, k: 'call' }] };
+  h.controller.update(call, 1);
+  assert.deepEqual(h.played, ['win.wav']);
+  assert.equal(fanfare.paused, false);
+  fanfare.ended = true;
+  fanfare.paused = true;
+  h.controller.update(call, 1);
+  assert.deepEqual(h.played, ['win.wav'], 'no skipped cues play after the fanfare ends');
+  h.controller.update({ ...call, revision: 5, log: [...call.log, { seq: 4, k: 'play' }] }, 1);
+  assert.deepEqual(h.played, ['win.wav', 'play.wav']);
+});
+
+test('match completion gets one bigger fanfare, never on initial snapshots or reconnects', () => {
+  const h = audio();
+  h.controller.update(snapshot(), 1);
+  const completed = snapshot({ revision: 2, phase: 'roundOver', matchWinner: 1, log: [{ seq: 1, k: 'win' }] });
+  h.controller.update(completed, 1);
+  h.controller.update(structuredClone(completed), 1);
+  assert.deepEqual(h.played, ['match-win.wav']);
+  assert.equal(h.media[0].volume, 0.36);
+  h.controller.update(null, 1);
+  assert.equal(h.media[0].paused, true);
+  h.controller.update(structuredClone(completed), 1);
+  assert.deepEqual(h.played, ['match-win.wav']);
+  const joining = audio();
+  joining.controller.update(completed, 1);
+  assert.deepEqual(joining.played, []);
+});
+
+test('muting immediately stops a celebration and unmuting never replays it', () => {
+  const h = audio();
+  h.controller.update(snapshot(), 1);
+  const finished = snapshot({ revision: 2, phase: 'roundOver', log: [{ seq: 1, k: 'win' }] });
+  h.controller.update(finished, 1);
+  h.media[0].currentTime = 0.5;
+  h.controller.setEnabled(false);
+  assert.equal(h.media[0].paused, true);
+  assert.equal(h.media[0].currentTime, 0);
+  h.controller.setEnabled(true);
+  h.controller.update(finished, 1);
+  assert.deepEqual(h.played, ['win.wav']);
 });
 
 test('muting stops playback and consumes events without replay on unmute', () => {
@@ -200,4 +333,24 @@ test('blocked autoplay and synchronous media failures never interrupt updates or
     await Promise.resolve();
     assert.equal(attempts, 2, 'later cues still attempt playback');
   }
+});
+
+test('a rejected fanfare releases its priority so the next user action can sound', async () => {
+  const played = [];
+  const h = audio({ createAudio(src) {
+    return {
+      currentTime: 0, paused: false, ended: false,
+      pause() { this.paused = true; },
+      play() {
+        played.push(src.split('/').at(-1));
+        return src.endsWith('/win.wav') ? Promise.reject(new Error('Autoplay blocked')) : Promise.resolve();
+      },
+    };
+  } });
+  h.controller.update(snapshot(), 1);
+  const finished = snapshot({ revision: 2, phase: 'roundOver', log: [{ seq: 1, k: 'win' }] });
+  h.controller.update(finished, 1);
+  await Promise.resolve();
+  h.controller.update({ ...finished, revision: 3, log: [...finished.log, { seq: 2, k: 'deal' }] }, 1);
+  assert.deepEqual(played, ['win.wav', 'deal.wav']);
 });

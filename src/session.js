@@ -1,4 +1,5 @@
 import { createBotDriver } from './bots.js';
+import { createAutoDrawDriver } from './auto-draw.js';
 import { createTurnClock } from './clock.js';
 import {
   applyAction, applyRoster, createTable, expireTurn, isValidTable, isValidView, rebuildTable, viewFor,
@@ -72,10 +73,16 @@ export function createSession({ send, onChange, storage = browserStorage(), rand
 
   // Computer players are played by whoever coordinates the table.
   const hosting = () => !destroyed && isHost() && table !== null && !recovery;
+  const actForPlayer = (id, action) => hosting() && commit(applyAction(table, id, action, { hostId, memberIds: ids(), random }));
   const bots = createBotDriver({
     getTable: () => (hosting() ? table : null),
-    act: (id, action) => hosting() && commit(applyAction(table, id, action, { hostId, memberIds: ids(), random })),
+    act: actForPlayer,
     random,
+    timers,
+  });
+  const autoDraw = createAutoDrawDriver({
+    getTable: () => (hosting() ? table : null),
+    act: actForPlayer,
     timers,
   });
 
@@ -154,6 +161,7 @@ export function createSession({ send, onChange, storage = browserStorage(), rand
     emit();
     publish();
     bots.schedule();
+    autoDraw.schedule();
     return true;
   }
 
@@ -161,6 +169,7 @@ export function createSession({ send, onChange, storage = browserStorage(), rand
     table = null;
     clock.reset();
     bots.stop();
+    autoDraw.stop();
     if (recovery) recovery.handles.forEach((handle) => timers.clearTimeout(handle));
     recovery = null;
   }
@@ -171,6 +180,7 @@ export function createSession({ send, onChange, storage = browserStorage(), rand
    * re-deals anything nobody could vouch for.
    */
   function beginRecovery() {
+    autoDraw.stop();
     if (recovery) recovery.handles.forEach((handle) => timers.clearTimeout(handle));
     const requestId = token();
     recovery = { requestId, reports: new Map(), handles: [] };

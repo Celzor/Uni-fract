@@ -1,4 +1,5 @@
 import { createBotDriver } from './bots.js';
+import { createAutoDrawDriver } from './auto-draw.js';
 import { createTurnClock } from './clock.js';
 import { MAX_BOTS, abandonRound, applyAction, applyRoster, createTable, expireTurn, viewFor } from './rules.js';
 
@@ -16,6 +17,7 @@ export function createLocalGame({ onChange, random = Math.random, now = () => Da
   const clock = createTurnClock({ now, timers, onExpire: () => commit(expireTurn(table, random)) });
   const act = (id, action) => commit(applyAction(table, id, action, { hostId: HUMAN_ID, memberIds: MEMBERS, random }));
   const driver = createBotDriver({ getTable: () => (destroyed ? null : table), act, random, timers, pace });
+  const autoDraw = createAutoDrawDriver({ getTable: () => (destroyed ? null : table), act, timers });
 
   function emit() {
     if (destroyed) return;
@@ -40,6 +42,7 @@ export function createLocalGame({ onChange, random = Math.random, now = () => Da
     clock.update(table);
     emit();
     driver.schedule();
+    autoDraw.schedule();
     return true;
   }
 
@@ -54,6 +57,7 @@ export function createLocalGame({ onChange, random = Math.random, now = () => Da
     destroy() {
       destroyed = true;
       driver.stop();
+      autoDraw.stop();
       clock.reset();
     },
   };
