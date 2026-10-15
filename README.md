@@ -79,7 +79,7 @@ Sound uses short, quiet cues for turns, playing and drawing cards, dealing, call
 
 Cards swoop between hands and piles individually. Drawn cards take a second to arrive, spaced apart so each one is visible; large penalties use tighter spacing to keep the animation brief. Draw Fours land with a heavier impact; stacked penalties show a floating total counting up. Round and match wins have a fanfare and confetti. Motion respects your system’s reduced-motion preference.
 
-Players sit around the felt, with your own seat beside your hand. Refract profile pictures appear when available, with initials as a fallback. Every card in your hand glows gently on your turn; playable cards lift up. The draw control sits below the deck, with space reserved so turn changes keep the table steady.
+Players sit around the felt, with your own seat beside your hand. Refract profile pictures appear when available, with initials as a fallback. A yellow outline and soft glow surround the whole hand area on your turn, with your profile outside it; playable cards lift up. The draw control sits below the deck, with space reserved so turn changes keep the table steady.
 
 ## How the integration works
 
