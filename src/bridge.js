@@ -25,7 +25,7 @@ export function connectActivity({ onInit, onParticipants, onMessage, scope = win
       if (!event.origin || event.origin === 'null') return;
       origin = event.origin;
       initialized = true;
-      onInit(message);
+      onInit(message, origin);
     } else if (initialized && message.type === 'participants' && isRoster(message.participants)) {
       onParticipants(message.participants);
     } else if (initialized && message.type === 'message' && isId(message.from) && 'data' in message) {

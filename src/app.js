@@ -1,5 +1,7 @@
 import { connectActivity } from './bridge.js';
 import { createGameAudio } from './audio.js';
+import { createAvatar } from './avatars.js';
+import { createTableEffects } from './effects.js';
 import { COLOR_NAMES, cardImage, cardName, colorOf, isWild, rankName, rankOf, sortHand } from './cards.js';
 import { createLocalGame } from './local.js';
 import { MAX_BOTS, MAX_PLAYERS, MIN_PLAYERS, botName, choicesFor, isBotId, topCard } from './rules.js';
@@ -9,12 +11,20 @@ const $ = (id) => document.getElementById(id);
 const embedded = window.parent !== window || new URLSearchParams(location.search).get('embedded') === '1';
 const SOUND_KEY = 'uni-refract:sound';
 const TIMER_CIRCUMFERENCE = 97.4;
+// Walk around the table from the viewer's left, preserving the seat order.
+const SEAT_POSITIONS = [
+  [], ['north'], ['west', 'east'], ['west', 'north', 'east'],
+  ['west', 'north-west', 'north-east', 'east'],
+  ['west', 'north-west', 'north', 'north-east', 'east'],
+  ['south-west', 'west', 'north-west', 'north-east', 'east', 'south-east'],
+];
 
 // Names seen this session, so the table talk can still name players who left.
 const names = new Map();
 const cardButtons = new Map();
 let live = null;
 let bridge = null;
+let refractOrigin = null;
 let controller = null;
 let handshakeTimer = null;
 let retryTimer = null;
@@ -22,9 +32,9 @@ let tickTimer = null;
 let pendingChoice = null;
 let audioSessionKey = null;
 let lastTopKey = null;
-let previousHand = null;
 let soundOn = readSoundPreference();
 const gameAudio = createGameAudio({ enabled: soundOn });
+const tableEffects = createTableEffects();
 
 document.body.classList.toggle('embedded', embedded);
 $('call-banner').hidden = embedded;
@@ -49,6 +59,10 @@ const nameOf = (id) => {
   if (isMe(id)) return 'You';
   return isBotId(id) ? botName(id) : names.get(id) ?? 'A player';
 };
+const avatarFor = (id) => createAvatar({
+  name: isBotId(id) ? botName(id).replace(/^Al /, '') : nameOf(id),
+  avatarUrl: live?.participants?.find((person) => person.id === id)?.avatarUrl,
+}, refractOrigin);
 const objectName = (id) => (isMe(id) ? 'you' : nameOf(id));
 const possessive = (id) => (isMe(id) ? 'Your' : `${nameOf(id)}’s`);
 const plural = (count, word) => `${count} ${word}${count === 1 ? '' : 's'}`;
@@ -103,6 +117,7 @@ function describe(entry) {
 // ---------------------------------------------------------------------------
 
 function render() {
+  const before = tableEffects.capture();
   for (const person of live?.participants ?? []) names.set(person.id, person.name);
   const view = live?.view ?? null;
   const atTable = !!view && view.phase !== 'lobby';
@@ -114,6 +129,7 @@ function render() {
   renderNotice();
   closeStaleChoice(view);
   gameAudio.update(view, me());
+  tableEffects.update(view, me(), before);
   scheduleTick();
 }
 
@@ -148,7 +164,7 @@ function renderLobby(view) {
   const list = $('seat-list');
   const rows = seats.map((id) => {
     const row = node('li', 'seat-row');
-    row.append(node('span', 'avatar', nameOf(id).slice(0, 1).toUpperCase()), node('strong', '', names.get(id) ?? nameOf(id)));
+    row.append(avatarFor(id), node('strong', '', names.get(id) ?? nameOf(id)));
     const tags = node('span', 'tags');
     if (isMe(id) && names.get(id) !== 'You') tags.append(node('span', 'tag you', 'You'));
     if (id === live?.hostId && embedded) tags.append(node('span', 'tag', 'Host'));
@@ -232,6 +248,7 @@ function renderTable(view) {
   const choices = choicesFor(view, self, view.hand);
   const myTurn = view.phase === 'playing' && view.current === self;
   const over = view.phase === 'roundOver';
+  $('table-arena').classList.toggle('round-over', over);
   const felt = $('felt');
   felt.dataset.color = view.color ?? '';
   felt.classList.toggle('my-turn', myTurn);
@@ -260,9 +277,10 @@ function renderSeats(view) {
     const index = view.seats.indexOf(id);
     const count = view.counts[index] ?? 0;
     const element = node('div', 'seat-chip');
+    element.dataset.playerId = String(id);
     element.classList.toggle('current', view.phase === 'playing' && view.current === id);
     element.classList.toggle('me', isMe(id));
-    const avatar = node('span', 'avatar', nameOf(id).slice(0, 1).toUpperCase());
+    const avatar = avatarFor(id);
     const copy = node('span', 'seat-copy');
     copy.append(node('strong', '', nameOf(id)));
     const score = view.scores[id] ?? 0;
@@ -280,7 +298,14 @@ function renderSeats(view) {
     element.setAttribute('aria-label', `${nameOf(id)}, ${plural(count, 'card')}, ${score} points${view.current === id ? ', taking a turn' : ''}`);
     return element;
   });
-  $('opponents').replaceChildren(...chips);
+  const ownSeat = chips.find((element) => element.classList.contains('me'));
+  const opponents = chips.filter((element) => element !== ownSeat);
+  opponents.forEach((element, index) => { element.dataset.position = SEAT_POSITIONS[opponents.length][index]; });
+  $('opponents').dataset.seatCount = String(opponents.length);
+  $('opponents').replaceChildren(...opponents);
+  $('self-seat').hidden = !ownSeat;
+  $('self-seat').replaceChildren(...(ownSeat ? [ownSeat] : []));
+  $('hand-area').classList.toggle('watching', !ownSeat);
 }
 
 function rotationFor(card, top) {
@@ -333,19 +358,25 @@ function renderStatus(view, choices, seated) {
   let detail;
   if (view.current === self) {
     if (view.pendingDraw > 0) {
-      status = `+${view.pendingDraw} coming your way!`;
-      const options = [];
-      if (ownMoves.length) options.push('stack a draw card to pass it on');
-      if (choices.challenge) options.push('challenge the Wild Draw Four');
-      options.push(`take the ${view.pendingDraw}`);
-      detail = options.join(', or ').replace(/^./, (letter) => letter.toUpperCase()) + '.';
+      if (!ownMoves.length && !choices.challenge) {
+        status = `No card to stack — taking +${view.pendingDraw}…`;
+        detail = 'The cards are coming to you automatically.';
+      } else {
+        status = `+${view.pendingDraw} coming your way!`;
+        const options = [];
+        if (ownMoves.length) options.push('stack a draw card to pass it on');
+        if (choices.challenge) options.push('challenge the Wild Draw Four');
+        options.push(`take the ${view.pendingDraw}`);
+        detail = options.join(', or ').replace(/^./, (letter) => letter.toUpperCase()) + '.';
+      }
     } else if (view.stage === 'drawn') {
       status = `You drew ${cardName(view.drawnCard)}.`;
       detail = choices.keep ? 'Play it now, or keep it and end your turn.' : 'Forced play: this one has to go down.';
     } else {
-      status = 'Your turn';
+      status = ownMoves.length ? 'Your turn' : 'No playable cards — drawing…';
       const match = isWild(top) ? COLOR_NAMES[view.color] : `${COLOR_NAMES[view.color]} or ${rankName(top)}`;
-      detail = ownMoves.length ? `Match ${match}, or play a wild.` : 'Nothing matches. Draw a card.';
+      detail = ownMoves.length ? `Match ${match}, or play a wild.`
+        : view.settings.drawToMatch ? 'Drawing until something matches.' : 'Taking a card from the pile automatically.';
     }
   } else {
     const current = view.current;
@@ -377,11 +408,11 @@ function renderHand(view, choices, myTurn, seated) {
   const container = $('hand');
   container.classList.toggle('my-turn', myTurn);
   const hand = view.hand ? sortHand(view.hand) : [];
-  const appeared = previousHand === null ? new Set() : new Set(hand.filter((card) => !previousHand.has(card)));
   const buttons = hand.map((card) => {
     let button = cardButtons.get(card);
     if (!button) {
       button = node('button', 'card');
+      button.dataset.card = String(card);
       button.type = 'button';
       const image = node('img');
       image.src = cardImage(card);
@@ -389,7 +420,6 @@ function renderHand(view, choices, myTurn, seated) {
       image.draggable = false;
       button.append(image);
       button.addEventListener('click', () => playCard(card));
-      button.addEventListener('animationend', () => button.classList.remove('fresh'));
       cardButtons.set(card, button);
     }
     const jump = choices.jumpIns.includes(card);
@@ -397,7 +427,6 @@ function renderHand(view, choices, myTurn, seated) {
     button.classList.toggle('playable', playable && !jump);
     button.classList.toggle('jump', jump);
     button.classList.toggle('drawn', view.drawnCard === card);
-    if (appeared.has(card)) button.classList.add('fresh');
     button.disabled = !playable;
     button.setAttribute('aria-label', `${cardName(card)}${jump ? ', jump in' : playable ? ', playable' : ''}`);
     return button;
@@ -408,7 +437,6 @@ function renderHand(view, choices, myTurn, seated) {
   } else {
     container.replaceChildren(...buttons);
   }
-  previousHand = view.phase === 'playing' ? new Set(hand) : null;
   $('my-label').textContent = seated ? 'Your hand' : 'Spectating';
   $('my-badge').hidden = !view.called.includes(me());
   $('my-count').textContent = hand.length ? plural(hand.length, 'card').toUpperCase() : '';
@@ -619,11 +647,14 @@ if (embedded) {
   });
   controller = { act: (action) => session.act(action), sync: () => session.sync(), destroy: () => session.destroy() };
   bridge = connectActivity({
-    onInit(message) {
+    onInit(message, origin) {
       clearTimeout(handshakeTimer);
+      refractOrigin = origin;
       const key = JSON.stringify([message.sessionId, message.self.id]);
       if (key !== audioSessionKey) {
         gameAudio.reset();
+        tableEffects.reset();
+        lastTopKey = null;
         audioSessionKey = key;
       }
       document.documentElement.dataset.theme = message.theme;
@@ -659,6 +690,7 @@ window.addEventListener('pagehide', () => {
   clearInterval(retryTimer);
   clearInterval(tickTimer);
   gameAudio.destroy();
+  tableEffects.destroy();
   controller?.destroy();
   bridge?.destroy();
 });

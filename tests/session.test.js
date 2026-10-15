@@ -1,9 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DECK_SIZE } from '../src/cards.js';
+import { AUTO_DRAW_DELAY_MS } from '../src/auto-draw.js';
 import { choicesFor, isValidTable } from '../src/rules.js';
 import { GAME_PROTOCOL, RECOVERY_WINDOW_MS, createSession } from '../src/session.js';
-import { fakeTimers, seeded } from './helpers.js';
+import { fakeTimers, playing, seeded } from './helpers.js';
 
 const person = (id) => ({ id, name: `Player ${id}`, avatarUrl: null });
 const memoryStorage = () => {
@@ -131,6 +132,17 @@ function network(initialIds = [1, 2, 3], { persistence = true, settings = { turn
 }
 
 const deal = (net) => net.act(net.members[0], { type: 'deal' });
+
+/** Restore a known legal position through the same storage path as a host reload. */
+function restorePosition(net, table) {
+  const hostId = net.members[0];
+  table.revision = 100;
+  net.stores.get(hostId).setItem(`${GAME_PROTOCOL}:${JSON.stringify(['test-session', hostId])}`,
+    JSON.stringify({ table, hostId, members: net.members }));
+  net.reload(hostId);
+  net.assertConverged();
+}
+
 /** Have whoever is on turn take one sensible action. */
 function playTurn(net) {
   const current = net.game(net.members[0]).current;
@@ -296,6 +308,70 @@ test('the host’s turn timer draws for an idle player and everyone sees the cou
   assert.notEqual(game.current, idle);
   assert.ok(game.log.some((entry) => entry.k === 'timeout' && entry.by === idle));
   assert.ok(game.counts[game.seats.indexOf(idle)] >= count + 1 || game.discard.length > 1);
+  net.assertConverged();
+});
+
+test('the host automatically draws for a stuck guest exactly once, including taking a stack', () => {
+  for (const pendingDraw of [0, 4]) {
+    const net = network([1, 2, 3]);
+    restorePosition(net, playing({
+      hands: [['r1', 'r4'], ['b1', 'g2'], ['r5', 'y6']], current: 2,
+      discard: [pendingDraw ? 'rd2' : 'r3'], pendingDraw, draw: ['r8'],
+    }));
+    const before = net.game(2);
+    const sentAt = net.sent.length;
+    net.timers.advance(AUTO_DRAW_DELAY_MS - 1);
+    net.flush();
+    assert.equal(net.game(2).revision, before.revision);
+    net.timers.advance(1);
+    net.flush();
+    assert.equal(net.game(2).hand.length, before.hand.length + (pendingDraw || 1));
+    assert.equal(net.game(2).revision, before.revision + 1);
+    assert.ok(net.game(2).log.some((entry) => entry.k === (pendingDraw ? 'take' : 'draw') && entry.by === 2));
+    assert.equal(net.sent.slice(sentAt).filter(({ data }) => data.kind === 'action').length, 0,
+      'guests never submit duplicate automatic actions');
+    net.timers.advance(AUTO_DRAW_DELAY_MS);
+    net.flush();
+    assert.equal(net.game(2).revision, before.revision + 1);
+    net.assertConverged();
+  }
+});
+
+test('a guest with a +4 challenge chooses whether to challenge or take the cards', () => {
+  const net = network([1, 2, 3]);
+  restorePosition(net, playing({
+    hands: [['r1', 'r4'], ['b1', 'g2'], ['r5', 'y6']], current: 2,
+    discard: ['wd4'], pendingDraw: 4, wd4: { by: 1, bluff: false },
+  }));
+  const before = net.game(2);
+  net.timers.advance(AUTO_DRAW_DELAY_MS * 2);
+  net.flush();
+  assert.equal(net.game(2).revision, before.revision);
+  net.act(2, { type: 'draw' });
+  assert.equal(net.game(2).hand.length, before.hand.length + 4);
+  assert.equal(net.game(2).current, 3);
+  net.assertConverged();
+});
+
+test('a new host reschedules a stuck guest draw and cancels the previous host’s pending draw', () => {
+  const net = network([1, 2, 3]);
+  restorePosition(net, playing({
+    hands: [['r1', 'r4'], ['r5', 'y6'], ['b1', 'g2']], current: 3, draw: ['r8'],
+  }));
+  const handSize = net.game(3).hand.length;
+  net.timers.advance(AUTO_DRAW_DELAY_MS / 2);
+  net.leave(1);
+  assert.equal(net.view(2).isHost, true);
+  assert.equal(net.view(2).recovering, false);
+  const recovered = net.game(2).revision;
+  net.timers.advance(AUTO_DRAW_DELAY_MS / 2);
+  net.flush();
+  assert.equal(net.game(2).revision, recovered, 'the old host’s due time has no effect');
+  net.timers.advance(AUTO_DRAW_DELAY_MS / 2);
+  net.flush();
+  assert.equal(net.game(3).hand.length, handSize + 1);
+  assert.equal(net.game(2).revision, recovered + 1);
+  assert.equal(net.game(3).log.filter((entry) => entry.k === 'draw' && entry.by === 3).length, 1);
   net.assertConverged();
 });
 

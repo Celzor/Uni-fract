@@ -131,14 +131,14 @@ try {
 
   await check('the host adds a computer player that everyone sees', async () => {
     await alex.locator('select[name="bots"]').selectOption('1');
-    await eventually('guest sees the bot seat', async () => (await sam.locator('#seat-list').textContent()).includes('PrismBot'));
+    await eventually('guest sees the bot seat', async () => (await sam.locator('#seat-list').textContent()).includes('Al LunarBot'));
     assert.equal(await sam.locator('select[name="bots"]').isDisabled(), true);
     assert.equal(await sam.locator('#seat-list button').count(), 0, 'only the host can add bots');
     await alex.locator('#seat-list button', { hasText: 'Add a computer player' }).click();
-    await eventually('guest sees the second bot', async () => (await sam.locator('#seat-list').textContent()).includes('LumenBot'));
+    await eventually('guest sees the second bot', async () => (await sam.locator('#seat-list').textContent()).includes('Al GoreBot'));
     assert.equal(await alex.locator('select[name="bots"]').inputValue(), '2');
     await alex.locator('select[name="bots"]').selectOption('1');
-    await eventually('back to one bot', async () => !(await sam.locator('#seat-list').textContent()).includes('LumenBot'));
+    await eventually('back to one bot', async () => !(await sam.locator('#seat-list').textContent()).includes('Al GoreBot'));
   });
 
   await check('each player is dealt a private hand', async () => {
@@ -155,7 +155,7 @@ try {
       await delay(300);
     }
     assert.ok(actions.filter((action) => action !== 'wait').length >= 8, actions.join(','));
-    await eventually('the bot has moved', async () => (await sam.locator('#log li').allTextContents()).some((line) => line.startsWith('Prism ')), 15000);
+    await eventually('the bot has moved', async () => (await sam.locator('#log li').allTextContents()).some((line) => line.startsWith('Al Lunar ')), 15000);
   });
 
   const jordan = frame(page, 4);
@@ -180,7 +180,7 @@ try {
   });
 
   await check('the new host keeps playing the bot', async () => {
-    const botsTurn = async () => /^Prism(’s turn| is facing| drew)/.test(await sam.locator('#status').textContent());
+    const botsTurn = async () => /^Al Lunar(’s turn| is facing| drew)/.test(await sam.locator('#status').textContent());
     await eventually('the bot’s turn comes round', async () => (await botsTurn()) || (await takeAnyTurn([sam, taylor, jordan]), false), 30000);
     await eventually('the bot moves on', async () => !(await botsTurn()), 10000);
   });
