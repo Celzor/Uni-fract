@@ -15,6 +15,8 @@
       <header class="site-header">
         <a class="brand" href="./" aria-label="No-no home"><span class="brand-symbol" aria-hidden="true">N</span><span>No-no<span class="brand-divider">/</span><span class="brand-product">card night</span></span></a>
         <div class="header-tools">
+          <button id="table-info-button" class="chip-button" type="button" aria-haspopup="dialog" aria-controls="table-info-dialog" hidden>Scores &amp; log</button>
+          <button id="expand-button" class="chip-button" type="button" aria-label="Expand game to full screen" title="Expand game" hidden>⛶</button>
           <button id="sound" class="chip-button" type="button" aria-pressed="true">Sound on</button>
           <span id="connection" class="connection"><span class="status-dot"></span><span id="connection-label">Local practice</span></span>
         </div>
@@ -148,7 +150,7 @@
             </div>
           </div>
 
-          <aside class="table-side">
+          <aside id="table-side" class="table-side">
             <section class="panel side-panel" aria-labelledby="scores-title">
               <div class="section-heading"><h2 id="scores-title">The score pad</h2><span id="round-label" class="small-label">ROUND 1</span></div>
               <ol id="scores" class="scores"></ol>
@@ -178,6 +180,14 @@
 
       <footer><span>No-no. One more hand?</span><span>Played over Refract · GPL-3.0</span></footer>
     </div>
+
+    <dialog id="table-info-dialog" class="dialog table-info-dialog" aria-labelledby="table-info-title">
+      <div class="table-info-heading">
+        <h2 id="table-info-title">At the table</h2>
+        <form method="dialog"><button class="ghost-button" type="submit" autofocus>Back to game</button></form>
+      </div>
+      <div id="table-info-content"></div>
+    </dialog>
 
     <dialog id="color-dialog" class="dialog" aria-labelledby="color-title">
       <form method="dialog">

@@ -6,7 +6,7 @@ const isId = (value) => Number.isSafeInteger(value) && value > 0;
 const isUser = (value) => isRecord(value) && isId(value.id) && typeof value.name === 'string' && (value.avatarUrl === null || typeof value.avatarUrl === 'string');
 export const isRoster = (value) => Array.isArray(value) && value.every(isUser) && new Set(value.map((person) => person.id)).size === value.length;
 
-export function connectActivity({ onInit, onParticipants, onMessage, scope = window }) {
+export function connectActivity({ onInit, onParticipants, onMessage, onFullscreen, scope = window }) {
   const host = scope.parent;
   let origin = null;
   let active = true;
@@ -30,6 +30,8 @@ export function connectActivity({ onInit, onParticipants, onMessage, scope = win
       onParticipants(message.participants);
     } else if (initialized && message.type === 'message' && isId(message.from) && 'data' in message) {
       onMessage(message.from, message.data);
+    } else if (initialized && message.type === 'fullscreen' && typeof message.on === 'boolean') {
+      onFullscreen?.(message.on);
     }
   };
   scope.addEventListener('message', listener);
@@ -42,6 +44,12 @@ export function connectActivity({ onInit, onParticipants, onMessage, scope = win
       if (encoded === undefined || new TextEncoder().encode(encoded).length > MAX_BYTES) throw new Error('Activity messages must be JSON of at most 16 KiB.');
       if (to !== undefined && (!Array.isArray(to) || !to.every(isId))) throw new Error('Recipients must be Refract user IDs.');
       post({ type: 'broadcast', data, ...(to === undefined ? {} : { to }) });
+    },
+    // Refract expands the iframe itself, including sandboxed packaged games.
+    // Call directly from a click or key press so the browser permits the request.
+    requestFullscreen(on = true) {
+      if (!active || !initialized || typeof on !== 'boolean') return;
+      post({ type: 'fullscreen', on });
     },
     close: () => post({ type: 'close' }),
     destroy() {

@@ -21,7 +21,7 @@ function init(overrides = {}) {
 
 function harness({ topLevel = false } = {}) {
   const sent = [];
-  const received = { init: [], participants: [], messages: [] };
+  const received = { init: [], participants: [], messages: [], fullscreen: [] };
   const listeners = new Set();
   const host = { postMessage: (message, origin) => sent.push({ message, origin }) };
   const scope = {
@@ -42,6 +42,7 @@ function harness({ topLevel = false } = {}) {
     onInit: (message) => received.init.push(message),
     onParticipants: (people) => received.participants.push(people),
     onMessage: (from, data) => received.messages.push({ from, data }),
+    onFullscreen: (on) => received.fullscreen.push(on),
   });
   return {
     sent,
@@ -171,6 +172,32 @@ test('enforces JSON payload limits in UTF-8 bytes and rejects invalid recipients
   assert.equal(h.sent.length, sentBeforeInvalid, 'invalid payloads never reach the host');
 });
 
+test('requests fullscreen only through the initialized host and validates its confirmations', () => {
+  const h = harness();
+  const fullscreen = (on) => ({ protocol: ACTIVITY_PROTOCOL, type: 'fullscreen', on });
+  h.client.requestFullscreen();
+  h.emit(fullscreen(true));
+  assert.equal(h.sent.length, 1, 'only ready is sent before initialization');
+  assert.deepEqual(h.received.fullscreen, []);
+
+  h.emit(init());
+  h.client.requestFullscreen();
+  h.client.requestFullscreen(false);
+  for (const invalid of [null, 'true', 1, {}]) h.client.requestFullscreen(invalid);
+  assert.deepEqual(h.sent.slice(1), [
+    { message: fullscreen(true), origin: HOST_ORIGIN },
+    { message: fullscreen(false), origin: HOST_ORIGIN },
+  ]);
+  assert.deepEqual(h.received.fullscreen, [], 'a request is not a successful fullscreen change');
+
+  h.emit(fullscreen(true), { source: {} });
+  h.emit(fullscreen(true), { origin: 'https://other.example' });
+  for (const invalid of [undefined, null, 'true', 1, {}]) h.emit(fullscreen(invalid));
+  h.emit(fullscreen(true));
+  h.emit(fullscreen(false));
+  assert.deepEqual(h.received.fullscreen, [true, false], 'trusted enter and Escape-exit confirmations reach the page');
+});
+
 test('destroy disconnects the listener and makes all outbound methods inert', () => {
   const h = harness();
   h.emit(init());
@@ -182,6 +209,7 @@ test('destroy disconnects the listener and makes all outbound methods inert', ()
   assert.equal(h.listeners.size, 0);
   h.client.ready();
   h.client.broadcast({ move: 0 });
+  h.client.requestFullscreen();
   h.client.close();
   h.emit(init({ sessionId: 'ignored-after-destroy' }));
   listener({ source: h.scope.parent, origin: HOST_ORIGIN, data: init() });
@@ -196,9 +224,10 @@ test('a standalone top-level page neither posts nor accepts its own activity mes
   h.emit({ protocol: ACTIVITY_PROTOCOL, type: 'message', from: 2, data: { move: 0 } });
   h.client.ready();
   h.client.broadcast({ move: 1 });
+  h.client.requestFullscreen();
   h.client.close();
   assert.deepEqual(h.sent, []);
-  assert.deepEqual(h.received, { init: [], participants: [], messages: [] });
+  assert.deepEqual(h.received, { init: [], participants: [], messages: [], fullscreen: [] });
   h.client.destroy();
   assert.equal(h.listeners.size, 0);
 });

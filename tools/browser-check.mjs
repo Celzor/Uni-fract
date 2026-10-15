@@ -148,6 +148,18 @@ try {
     assert.equal(new Set(hands.map((hand) => JSON.stringify(hand))).size, 3);
   });
 
+  await check('embedded tables keep the hand inside their frame', async () => {
+    for (const view of [alex, sam, taylor]) {
+      const fits = await view.locator('body').evaluate(() => {
+        const hand = document.querySelector('#hand').getBoundingClientRect();
+        return document.documentElement.scrollHeight <= innerHeight + 1
+          && document.documentElement.scrollWidth <= innerWidth + 1
+          && hand.top >= 0 && hand.bottom <= innerHeight + 1;
+      });
+      assert.ok(fits, 'the embedded table and hand fit without document scrolling');
+    }
+  });
+
   await check('turns pass around the table, bot included', async () => {
     const actions = [];
     for (let i = 0; i < 20; i += 1) {
@@ -167,6 +179,7 @@ try {
 
   await check('the host leaves; everyone keeps their exact cards and a watcher takes the seat', async () => {
     const before = await Promise.all([sam, taylor].map(handNames));
+    if (await alex.locator('#table-info-button').isVisible()) await alex.locator('#table-info-button').click();
     await alex.locator('#refract-table-tools [data-action="leave"]').click();
     await page.locator('iframe[data-participant-id="1"]').waitFor({ state: 'detached' });
     for (const view of [sam, taylor, jordan]) await connected(view);
