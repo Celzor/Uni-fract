@@ -1,0 +1,23 @@
+{
+  "name": "nono-server",
+  "version": "1.0.0",
+  "description": "",
+  "main": "server.js",
+  "scripts": {
+    "test": "nyc mocha",
+    "start": "nodemon NoNoBot.js"
+  },
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "chalk": "^4.1.0",
+    "irc": "^0.5.2",
+    "nodemon": "^2.0.6",
+    "irc-colors": "^1.5.0"
+  },
+  "devDependencies": {
+    "mocha": "^8.2.1",
+    "chai": "^4.2.0",
+    "nyc": "^15.1.0"
+  }
+}
