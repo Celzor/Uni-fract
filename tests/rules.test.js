@@ -2,9 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { COLORS, DECK_SIZE, FACES, cardName, colorOf, isNumber, points, rankOf, sortHand } from '../src/cards.js';
 import {
-  DEFAULT_SETTINGS, MAX_PLAYERS, abandonRound, applyAction, applyRoster, choicesFor, createTable, expireTurn,
-  isValidTable, isValidView, normalizeSettings, rebuildTable, topCard, viewFor,
+  BOT_NAMES, DEFAULT_SETTINGS, MAX_PLAYERS, abandonRound, applyAction, applyRoster, botName, choicesFor, createTable,
+  expireTurn, isBotId, isValidTable, isValidView, normalizeSettings, rebuildTable, topCard, viewFor,
 } from '../src/rules.js';
+import { chooseTurnAction } from '../src/bots.js';
 import { cardPicker, faces, handOf, playing, seeded } from './helpers.js';
 
 const HOST = 1;
@@ -355,6 +356,38 @@ test('a table can be rebuilt from one player’s view and the hands everyone rep
   assert.deepEqual(choicesFor(recovered, 2, handOf(recovered, 2)), { ...choicesFor(recovered, 2, handOf(recovered, 2)), challenge: false, draw: true });
 });
 
+test('computer players fill free seats, give them up to people, and play by the same rules', () => {
+  assert.deepEqual(BOT_NAMES.map((_, index) => botName(-(index + 1))), BOT_NAMES);
+  assert.equal(isBotId(-1) && isBotId(-5) && !isBotId(-6) && !isBotId(1), true);
+
+  // A lone person can play against bots.
+  let table = applyRoster(createTable({ settings: { bots: 2 } }), [1]);
+  assert.deepEqual(table.seats, [1, -1, -2]);
+  assert.equal(act(table, 2, { type: 'settings', settings: { bots: 5 } }, [1, 2]), null, 'only the host adds bots');
+  assert.equal(act(table, -1, { type: 'deal' }, [1]), null, 'bots cannot deal');
+
+  // People always come first: arrivals bump the last bots, departures bring them back.
+  table = act(table, HOST, { type: 'settings', settings: { bots: 5 } }, [1]);
+  assert.deepEqual(table.seats, [1, -1, -2, -3, -4, -5]);
+  table = applyRoster(table, [1, 2, 3]);
+  assert.deepEqual(table.seats, [1, -1, -2, -3, 2, 3]);
+  table = applyRoster(table, [1]);
+  assert.deepEqual(table.seats, [1, -1, -2, -3, -4, -5]);
+  table = act(table, HOST, { type: 'seat', watch: true }, [1]);
+  assert.deepEqual(table.seats, [-1, -2, -3, -4, -5], 'the host can sit out and watch the bots');
+
+  // Bots act through the rules engine like anyone else, and never leave mid-round.
+  let duel = playing({ seats: [1, -1, -2], hands: [['g1'], ['r5', 'b2'], ['y4']], discard: ['r3'], settings: { bots: 2 }, current: -1 });
+  duel = act(duel, -1, { type: 'play', card: cardIn(duel, -1, 'r5') });
+  assert.equal(duel.current, -2);
+  assert.deepEqual(applyRoster(duel, [1]).seats, [1, -1, -2]);
+  assert.equal(act(duel, HOST, { type: 'settings', settings: { bots: 3 } }, [1]), null, 'no new bots mid-round');
+  const view = viewFor(duel, 1);
+  assert.ok(isValidView(view, [1], 1));
+  assert.equal(isValidTable({ ...duel, settings: { ...duel.settings, bots: 1 } }), false, 'no seat for a bot the host never added');
+  assert.equal(isValidView({ ...view, settings: { ...view.settings, bots: 1 } }, [1], 1), false);
+});
+
 test('validators reject malformed tables and views', () => {
   const table = playing({ hands: [['g1'], ['b2', 'b5'], ['y4']], discard: ['r3'] });
   for (const broken of [null, {}, { ...table, phase: 'nope' }, { ...table, drawPile: table.drawPile.slice(1) },
@@ -379,6 +412,7 @@ test('validators reject malformed tables and views', () => {
 function randomSettings(random) {
   const pick = (options) => options[Math.floor(random() * options.length)];
   return normalizeSettings({
+    bots: pick([0, 0, 1, 2, 3]),
     stacking: pick(['off', 'same', 'progressive']),
     jumpIn: random() < 0.6,
     sevenZero: random() < 0.5,
@@ -422,8 +456,11 @@ test('hundreds of random games conserve every card and always stay valid', () =>
   const random = seeded(2026);
   let rounds = 0;
   for (let game = 0; game < 150; game += 1) {
-    let members = Array.from({ length: 2 + Math.floor(random() * 6) }, (_, index) => index + 1);
-    let table = applyRoster(createTable({ settings: randomSettings(random) }), members, random);
+    let members = Array.from({ length: 1 + Math.floor(random() * 6) }, (_, index) => index + 1);
+    const settings = randomSettings(random);
+    // Someone alone needs at least one computer player to deal.
+    if (members.length === 1 && settings.bots === 0) settings.bots = 1;
+    let table = applyRoster(createTable({ settings }), members, random);
     table = applyAction(table, HOST, { type: 'deal' }, { hostId: HOST, memberIds: members, random });
     for (let stepCount = 0; stepCount < 2500 && table.phase === 'playing'; stepCount += 1) {
       const roll = random();
@@ -438,7 +475,8 @@ test('hundreds of random games conserve every card and always stay valid', () =>
       } else {
         // Usually the player on turn acts; sometimes anyone tries anything.
         const actor = roll < 0.85 ? table.current : members[Math.floor(random() * members.length)];
-        const action = randomAction(table, actor, random);
+        // Computer players mostly use the real bot logic, which must only ever choose legal moves.
+        const action = isBotId(actor) && random() < 0.7 ? chooseTurnAction(table, actor, random) : randomAction(table, actor, random);
         if (action) {
           next = applyAction(table, actor, action, { hostId: HOST, memberIds: members, random });
           assert.notEqual(next, null, `a legal ${action.type} must apply (game ${game}, step ${stepCount})`);
@@ -447,7 +485,9 @@ test('hundreds of random games conserve every card and always stay valid', () =>
       if (next) table = next;
       assert.ok(isValidTable(table), `table valid after step ${stepCount} of game ${game}`);
       assertCanMove(table, `game ${game}, step ${stepCount}`);
-      for (const id of members) assert.ok(isValidView(viewFor(table, id), members, id), `view for ${id} valid`);
+      for (const id of [...members, ...table.seats.filter(isBotId)]) {
+        assert.ok(isValidView(viewFor(table, id), members, id), `view for ${id} valid`);
+      }
     }
     assert.notEqual(table.phase, 'playing', `game ${game} finished`);
     if (table.phase === 'roundOver') rounds += 1;

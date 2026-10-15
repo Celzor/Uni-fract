@@ -1,3 +1,4 @@
+import { createBotDriver } from './bots.js';
 import { createTurnClock } from './clock.js';
 import {
   applyAction, applyRoster, createTable, expireTurn, isValidTable, isValidView, rebuildTable, viewFor,
@@ -67,6 +68,15 @@ export function createSession({ send, onChange, storage = browserStorage(), rand
     onExpire() {
       if (!destroyed && isHost() && table && !recovery) commit(expireTurn(table, random));
     },
+  });
+
+  // Computer players are played by whoever coordinates the table.
+  const hosting = () => !destroyed && isHost() && table !== null && !recovery;
+  const bots = createBotDriver({
+    getTable: () => (hosting() ? table : null),
+    act: (id, action) => hosting() && commit(applyAction(table, id, action, { hostId, memberIds: ids(), random })),
+    random,
+    timers,
   });
 
   function persist() {
@@ -143,12 +153,14 @@ export function createSession({ send, onChange, storage = browserStorage(), rand
     notice = restingNotice();
     emit();
     publish();
+    bots.schedule();
     return true;
   }
 
   function stopHosting() {
     table = null;
     clock.reset();
+    bots.stop();
     if (recovery) recovery.handles.forEach((handle) => timers.clearTimeout(handle));
     recovery = null;
   }

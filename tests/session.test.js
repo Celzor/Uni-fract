@@ -324,6 +324,45 @@ test('only seated players can deal the next round and only the host changes the 
   net.assertConverged();
 });
 
+/** People act when it is their turn; the host's bots act on their own as time passes. */
+function playWithBots(net) {
+  const current = net.game(net.members[0]).current;
+  if (current > 0) playTurn(net);
+  net.timers.advance(400);
+  net.flush();
+}
+
+test('someone alone in a call can play a whole round against host-run bots', () => {
+  const net = network([1], { settings: { turnTimer: 0, bots: 2 } });
+  assert.deepEqual(net.game(1).seats, [1, -1, -2]);
+  deal(net);
+  assert.equal(net.game(1).phase, 'playing');
+  for (let tick = 0; tick < 4000 && net.game(1).phase === 'playing'; tick += 1) playWithBots(net);
+  assert.equal(net.game(1).phase, 'roundOver');
+  assert.ok(net.game(1).log.some((entry) => entry.by < 0), 'the bots took turns');
+  assert.ok(isValidTable(net.hostTable()));
+});
+
+test('guests see the bots, and a new host keeps playing them after the host leaves', () => {
+  const net = network([1, 2, 3], { settings: { turnTimer: 0, bots: 1 } });
+  assert.deepEqual(net.game(2).seats, [1, 2, 3, -1], 'guests see the bot’s seat');
+  deal(net);
+  for (let tick = 0; tick < 12; tick += 1) playWithBots(net);
+  net.leave(1);
+  net.settle();
+  assert.equal(net.view(2).isHost, true);
+  assert.ok(net.game(3).seats.includes(-1), 'the bot keeps its seat');
+  net.assertConverged();
+  const before = Math.max(...net.game(2).log.map((entry) => entry.n));
+  let botMoved = false;
+  for (let tick = 0; tick < 300 && !botMoved && net.game(2).phase === 'playing'; tick += 1) {
+    playWithBots(net);
+    botMoved = net.game(2).log.some((entry) => entry.n > before && entry.by === -1);
+  }
+  assert.ok(botMoved, 'the new host plays the bot');
+  net.assertConverged();
+});
+
 test('a new activity session starts from a fresh lobby', () => {
   const net = network([1, 2]);
   deal(net);

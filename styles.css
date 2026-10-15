@@ -78,11 +78,6 @@ h1 span { color: var(--cyan); }
 .seat-row.empty { border-style: dashed; color: var(--faint); font-size: 12px; justify-content: center; }
 .avatar { --ring: var(--line); width: 32px; height: 32px; flex: 0 0 auto; border-radius: 50%; display: grid; place-items: center; font-weight: 750; font-size: 13px; color: var(--text); background: var(--raised); box-shadow: 0 0 0 2px var(--ring); }
 .watchers { color: var(--muted); font-size: 11px; margin-top: 12px; overflow-wrap: anywhere; }
-.bot-setup { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); font-size: 12px; color: var(--muted); }
-.stepper { display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
-.stepper button { width: 34px; height: 32px; border: 0; background: var(--raised); font-size: 16px; }
-.stepper button:disabled { color: var(--faint); }
-.stepper output { min-width: 34px; text-align: center; font-weight: 700; font-variant-numeric: tabular-nums; }
 #seat-toggle { margin-top: 14px; }
 .refract-tools { display: flex; gap: 16px; margin-top: 14px; }
 .settings { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 18px; }
