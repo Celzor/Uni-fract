@@ -60,7 +60,7 @@ The host sets these in the lobby, or between rounds.
 | Computer players | None, 1–5 (practice starts with 3) | Bots fill empty seats and play by the same rules: they stack, jump in, shout “Oh no!” (usually), and will catch you if you forget. People always get priority: someone joining between rounds takes a bot’s seat. |
 | Turn timer | Off, 10–60 s (default 30 s) | When time runs out you draw automatically (or take the stacked draws), and your turn ends. A just-drawn card gets at least five seconds of decision time. |
 | Draw stacking | Off · +2 on +2, +4 on +4 · also +4 on +2 | Answer a draw card with your own to pass the growing total to the next player. Whoever can’t (or won’t) takes the lot and loses their turn. |
-| Jump-in | On / off | Play a card identical to the top card (same colour and symbol) out of turn. Play continues from you. You can’t jump in on your own card, and wilds never jump in. |
+| Jump-in | On / off | Play a card identical to the top card (same colour and symbol) out of turn, including a second copy on your own card. Play continues from you. Identical +2s add to a pending draw stack; wilds never jump in. |
 | 7-0 | On / off | A 7 swaps your hand with a player you choose. A 0 passes every hand one seat along in the direction of play. |
 | Wild Draw Four | Can be challenged · No challenges · Only when stuck | When challengeable, the player hit can call a bluff. If the player who played it held the active colour, they draw the cards and the challenger plays on; otherwise the challenger draws them plus two more and loses their turn. |
 | Shout “Oh no!” | On / off | Press **OH NO!** as you play your second-to-last card (or right after). Forget, and anyone can **Catch** you for two cards until the next player moves. |
@@ -71,13 +71,13 @@ The host sets these in the lobby, or between rounds.
 
 Always on: Skip skips the next player; Reverse flips direction (with two players it acts as a Skip); Draw Two and Wild Draw Four make the next player draw and lose their turn unless they can stack or challenge. A drawn card that can be played may be played straight away or kept. Rounds open on a number card, and the first player rotates each round. When the draw pile runs out, the discards are reshuffled under the top card.
 
-If you have no legal card, the table draws for you after a short pause (normally one second, with extra time to catch a missed “Oh no!”). This also takes an unanswered draw stack automatically. A challengeable +4 still waits for your choice to challenge or take the cards. The host controls automatic draws in multiplayer, so cards are only drawn once.
+If you have no legal card, the table draws for you after a short pause (normally 1.6 seconds, with extra time to catch a missed “Oh no!”). This also takes an unanswered draw stack automatically. A challengeable +4 still waits for your choice to challenge or take the cards. The host controls automatic draws in multiplayer, so cards are only drawn once.
 
 Keyboard: **D** draw, **O** shout “Oh no!”, **C** catch, **K** keep.
 
 Sound uses short, quiet cues for turns, playing and drawing cards, dealing, calls, and round wins. **Sound on / off** mutes every effect and remembers your preference. Only one cue plays at a time; repeated multiplayer snapshots do not replay sounds.
 
-Cards swoop between hands and piles individually. Draw Fours land with a heavier impact; stacked penalties show a floating total counting up. Round and match wins have a fanfare and confetti. Motion respects your system’s reduced-motion preference.
+Cards swoop between hands and piles individually. Drawn cards take a second to arrive, spaced apart so each one is visible; large penalties use tighter spacing to keep the animation brief. Draw Fours land with a heavier impact; stacked penalties show a floating total counting up. Round and match wins have a fanfare and confetti. Motion respects your system’s reduced-motion preference.
 
 Players sit around the felt, with your own seat beside your hand. Refract profile pictures appear when available, with initials as a fallback. Every card in your hand glows gently on your turn; playable cards lift up. The draw control sits below the deck, with space reserved so turn changes keep the table steady.
 

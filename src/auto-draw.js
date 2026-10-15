@@ -1,7 +1,7 @@
 import { choicesFor, isBotId } from './rules.js';
 
 /** Leave enough time to show why cards are coming from the pile. */
-export const AUTO_DRAW_DELAY_MS = 1000;
+export const AUTO_DRAW_DELAY_MS = 1600;
 export const AUTO_DRAW_CATCH_GRACE_MS = 1500;
 
 function automaticDraw(table) {

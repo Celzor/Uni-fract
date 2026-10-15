@@ -174,9 +174,6 @@ test('jump-in lets an identical card play out of turn and steals the turn order'
   assert.equal(jumped.lastPlay.jumpIn, true);
   assert.equal(act(jumped, 2, { type: 'draw', seq: table.turnSeq }), null, 'the skipped player’s stale click is refused');
 
-  const ownCard = playing({ hands: [['g7', 'g7', 'r1'], ['b2'], ['y4']], discard: ['g3'] });
-  const afterOwn = play(ownCard, 1, 'g7');
-  assert.equal(choicesFor(afterOwn, 1, handOf(afterOwn, 1)).jumpIns.length, 0, 'no jumping in on your own card');
   const off = play(playing({ hands: [['g7', 'r1'], ['b2'], ['g7']], discard: ['g3'], settings: { jumpIn: false } }), 1, 'g7');
   assert.equal(choicesFor(off, 3, handOf(off, 3)).jumpIns.length, 0);
 
@@ -185,6 +182,55 @@ test('jump-in lets an identical card play out of turn and steals the turn order'
   stack = act(stack, 4, { type: 'play', card: cardIn(stack, 4, 'rd2'), seq: -1 });
   assert.equal(stack.pendingDraw, 4);
   assert.equal(stack.current, 1, 'a jump-in on a +2 passes the growing stack along');
+});
+
+test('a player can jump in on their own identical card before the next play', () => {
+  const table = playing({ hands: [['g7', 'g7', 'g1', 'b7'], ['g2', 'b2'], ['y4']], discard: ['g3'] });
+  const first = cardIn(table, 1, 'g7');
+  const afterOwn = play(table, 1, 'g7');
+  const duplicate = cardIn(afterOwn, 1, 'g7');
+  assert.deepEqual(choicesFor(afterOwn, 1, handOf(afterOwn, 1)).jumpIns, [duplicate]);
+  assert.deepEqual(choicesFor(viewFor(afterOwn, 1), 1, handOf(afterOwn, 1)).playable, [duplicate]);
+  assert.equal(play(afterOwn, 1, 'g1'), null, 'matching only colour is insufficient');
+  assert.equal(play(afterOwn, 1, 'b7'), null, 'matching only rank is insufficient');
+  assert.equal(act(afterOwn, 1, { type: 'play', card: first }), null, 'the first physical card cannot be reused');
+
+  const jumped = play(afterOwn, 1, 'g7', { seq: table.turnSeq });
+  assert.ok(isValidTable(jumped));
+  assert.deepEqual(faces(handOf(jumped, 1)), ['g1', 'b7']);
+  assert.deepEqual(jumped.discard.slice(-2), [first, duplicate]);
+  assert.equal(jumped.lastPlay.jumpIn, true);
+  assert.equal(jumped.log.at(-1).jump, true);
+  assert.equal(jumped.current, 2, 'play continues from the player who jumped in');
+  assert.equal(act(jumped, 2, { type: 'draw', seq: afterOwn.turnSeq }), null, 'self jump-in invalidates stale turn actions');
+
+  const movedOn = play(afterOwn, 2, 'g2');
+  assert.equal(play(movedOn, 1, 'g7'), null, 'a changed top card closes the opportunity');
+  const disabled = { ...afterOwn, settings: { ...afterOwn.settings, jumpIn: false } };
+  assert.equal(play(disabled, 1, 'g7'), null, 'self jump-in respects the house rule');
+});
+
+test('self jump-ins add identical Draw Twos to the stack and respect stacking settings', () => {
+  for (const stacking of ['same', 'progressive', 'off']) {
+    const table = playing({ hands: [['rd2', 'rd2', 'r1'], ['b2'], ['y4']], discard: ['r3'], settings: { stacking } });
+    const afterOwn = play(table, 1, 'rd2');
+    const jumped = play(afterOwn, 1, 'rd2');
+    assert.ok(isValidTable(jumped));
+    assert.equal(jumped.lastPlay.jumpIn, true);
+    assert.deepEqual(faces(handOf(jumped, 1)), ['r1']);
+    if (stacking === 'off') {
+      assert.equal(jumped.pendingDraw, 0, 'each +2 settles immediately when stacking is disabled');
+      assert.equal(handOf(jumped, 2).length, 5);
+      assert.equal(jumped.current, 3);
+    } else {
+      assert.equal(jumped.pendingDraw, 4);
+      assert.equal(jumped.current, 2, 'the next player still faces the combined stack');
+      const taken = act(jumped, 2, { type: 'draw' });
+      assert.equal(handOf(taken, 2).length, 5);
+      assert.equal(taken.pendingDraw, 0);
+      assert.equal(taken.current, 3);
+    }
+  }
 });
 
 test('7-0 swaps a chosen hand on 7 and passes every hand along on 0', () => {

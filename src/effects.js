@@ -180,7 +180,8 @@ export function createTableEffects() {
     const dx = finish.x - start.x;
     const dy = finish.y - start.y;
     const direction = dx < 0 ? -1 : 1;
-    const duration = heavy ? 640 : playing ? 470 : deal ? 490 : 620;
+    const drawing = !playing && !deal;
+    const duration = heavy ? 640 : playing ? 470 : deal ? 490 : 1000;
     const endScale = target || playing ? clamp(to.width / cardWidth, 0.5, 1.8) : 0.38;
     const rotation = playing ? ((card * 7) % 9) - 4 : (index % 5 - 2) * 2;
     const arc = heavy ? 100 : playing ? 58 : 35 + Math.min(45, Math.abs(dx) * 0.1);
@@ -196,7 +197,7 @@ export function createTableEffects() {
       { offset: 0.82, opacity: 1, transform: transform(dx, dy + (heavy ? 8 : -5), rotation + direction * 3, endScale * (heavy ? 1.12 : 1.03)) },
       { offset: 0.94, opacity: 1, transform: transform(dx, dy - 2, rotation - direction, endScale * 0.98) },
       { offset: 1, opacity: target || playing ? 1 : 0, transform: transform(dx, dy, rotation, endScale) },
-    ], { duration, delay, easing: 'cubic-bezier(.18,.7,.23,1)', fill: 'both' }, () => remove(flight));
+    ], { duration, delay, easing: drawing ? 'cubic-bezier(.4,0,.2,1)' : 'cubic-bezier(.18,.7,.23,1)', fill: 'both' }, () => remove(flight));
     return delay + duration;
   }
 
@@ -351,7 +352,8 @@ export function createTableEffects() {
         // The event stores the number actually drawn, including an exhausted
         // deck. Counting only hand deltas loses draws followed by a forced play.
         const count = clamp(Number.isSafeInteger(entry.n) ? entry.n : 0, 0, DECK_SIZE);
-        const gap = count <= 16 ? 78 : Math.max(9, 1200 / count);
+        // Let each card register, while keeping even a large penalty under 3.4s.
+        const gap = Math.min(220, 2400 / Math.max(1, count - 1));
         for (let index = 0; index < count; index += 1) {
           const card = id === selfId ? newCards[newCardIndex++] ?? null : null;
           lastFinish = Math.max(lastFinish, fly({
