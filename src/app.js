@@ -35,12 +35,15 @@ let lastTopKey = null;
 let soundOn = readSoundPreference();
 const gameAudio = createGameAudio({ enabled: soundOn });
 const tableEffects = createTableEffects();
+const compactFrame = matchMedia('(max-width: 1100px), (max-height: 700px)');
+let expanded = false;
 
 document.body.classList.toggle('embedded', embedded);
 $('call-banner').hidden = embedded;
 if (embedded) {
   $('connection').dataset.state = 'waiting';
   $('connection-label').textContent = 'Connecting to Refract';
+  $('expand-button').hidden = false;
 } else if (matchMedia('(prefers-color-scheme: light)').matches) {
   document.documentElement.dataset.theme = 'light';
 }
@@ -123,6 +126,9 @@ function render() {
   const atTable = !!view && view.phase !== 'lobby';
   $('lobby').hidden = atTable;
   $('table').hidden = !atTable;
+  document.body.classList.toggle('at-table', atTable);
+  document.body.classList.toggle('round-finished', view?.phase === 'roundOver');
+  updateTableInfo();
   renderConnection();
   if (atTable) renderTable(view);
   else renderLobby(view);
@@ -143,6 +149,8 @@ function renderConnection() {
   }
   $('connection-label').textContent = label;
   $('connection').dataset.state = ready ? 'connected' : 'waiting';
+  $('connection').title = label;
+  $('connection').setAttribute('aria-label', label);
   $('sound').textContent = soundOn ? 'Sound on' : 'Sound off';
   $('sound').setAttribute('aria-pressed', String(soundOn));
   $('refract-lobby-tools').hidden = !embedded;
@@ -455,8 +463,21 @@ function fitHand() {
   const available = container.clientWidth - 16;
   const gap = 6;
   const needed = cards.length * width + (cards.length - 1) * gap;
-  const overlap = needed <= available ? -gap : Math.min(width * 0.8, (cards.length * width - available) / (cards.length - 1));
+  const overlap = needed <= available ? -gap : Math.min(width * (embedded ? 0.94 : 0.8), (cards.length * width - available) / (cards.length - 1));
   container.style.setProperty('--overlap', `${overlap}px`);
+}
+
+/** Keep secondary information accessible without pushing the hand out of a call frame. */
+function updateTableInfo() {
+  const compact = embedded && compactFrame.matches;
+  const dialog = $('table-info-dialog');
+  const destination = compact ? $('table-info-content') : $('table');
+  if ($('table-side').parentElement !== destination) {
+    if (dialog.open) dialog.close();
+    destination.append($('table-side'));
+  }
+  $('table-info-button').hidden = !compact || $('table').hidden;
+  if ($('table').hidden && dialog.open) dialog.close();
 }
 
 function renderScores(view) {
@@ -612,6 +633,8 @@ $('sound').addEventListener('click', () => {
   try { localStorage.setItem(SOUND_KEY, soundOn ? 'on' : 'off'); } catch { /* Preference only. */ }
   renderConnection();
 });
+$('table-info-button').addEventListener('click', () => $('table-info-dialog').showModal());
+$('expand-button').addEventListener('click', () => bridge?.requestFullscreen(!expanded));
 for (const button of document.querySelectorAll('[data-action="sync"]')) {
   button.addEventListener('click', () => {
     bridge?.ready();
@@ -624,7 +647,7 @@ for (const button of document.querySelectorAll('[data-action="leave"]')) {
 
 // Keyboard shortcuts for quick hands: D draw, O shout "Oh no!", C catch, K keep.
 document.addEventListener('keydown', (event) => {
-  if (event.altKey || event.ctrlKey || event.metaKey || pendingChoice) return;
+  if (event.altKey || event.ctrlKey || event.metaKey || pendingChoice || $('table-info-dialog').open) return;
   if (event.target instanceof HTMLElement && event.target.closest('input, select, textarea')) return;
   const view = live?.view;
   if (!view || view.phase !== 'playing') return;
@@ -635,7 +658,9 @@ document.addEventListener('keydown', (event) => {
     send({ type: shortcut });
   }
 });
-window.addEventListener('resize', fitHand);
+window.addEventListener('resize', () => { updateTableInfo(); fitHand(); });
+const handResize = new ResizeObserver(fitHand);
+handResize.observe($('hand'));
 
 if (embedded) {
   const session = createSession({
@@ -647,6 +672,12 @@ if (embedded) {
   });
   controller = { act: (action) => session.act(action), sync: () => session.sync(), destroy: () => session.destroy() };
   bridge = connectActivity({
+    onFullscreen(on) {
+      expanded = on;
+      const label = on ? 'Exit full screen' : 'Expand game to full screen';
+      $('expand-button').setAttribute('aria-label', label);
+      $('expand-button').title = label;
+    },
     onInit(message, origin) {
       clearTimeout(handshakeTimer);
       refractOrigin = origin;
@@ -691,6 +722,7 @@ window.addEventListener('pagehide', () => {
   clearInterval(tickTimer);
   gameAudio.destroy();
   tableEffects.destroy();
+  handResize.disconnect();
   controller?.destroy();
   bridge?.destroy();
 });

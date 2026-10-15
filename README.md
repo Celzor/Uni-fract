@@ -81,6 +81,8 @@ Cards swoop between hands and piles individually. Drawn cards take a second to a
 
 Players sit around the felt, with your own seat beside your hand. Refract profile pictures appear when available, with initials as a fallback. A yellow outline and soft glow surround the whole hand area on your turn, with your profile outside it; playable cards lift up. The draw control sits below the deck, with space reserved so turn changes keep the table steady.
 
+Inside Refract, the table and cards adapt to the frame's height as well as its width. Compact frames put opponents in a strip and move the score pad, table talk, and table tools into **Scores & log**. The **Expand** button requests full screen from Refract. Very short frames retain scrolling inside the game so controls stay reachable; the header and Expand button stay in place.
+
 ## How the integration works
 
 The wire contract is **`refract-activity/1`**, through the small, dependency-free [bridge](src/bridge.js) shared with [refract-tack-toe](https://github.com/Celzor/refract-tack-toe). Messages within the activity use `uni-refract/1`, the Refract session ID, and the elected host ID.
