@@ -8,6 +8,8 @@ const fixedFiles = new Set([
   'index.html',
   'styles.css',
   'LICENSE',
+  'assets/audio/LICENSE.txt',
+  'assets/audio/CREDITS.txt',
   'tools/preview.html',
   'tools/preview.js',
   'tools/preview.css',
@@ -53,7 +55,7 @@ export async function listPublicFiles(root) {
     }
   }
   const files = [];
-  for (const path of candidates) {
+  for (const path of new Set(candidates)) {
     if (await isRegularPublicFile(root, path)) files.push(path);
   }
   return files.sort();

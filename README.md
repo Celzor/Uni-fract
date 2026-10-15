@@ -73,6 +73,8 @@ Always on: Skip skips the next player; Reverse flips direction (with two players
 
 Keyboard: **D** draw, **O** shout “Oh no!”, **C** catch, **K** keep.
 
+Sound uses short, quiet cues for turns, playing and drawing cards, dealing, calls, and round wins. **Sound on / off** mutes every effect and remembers your preference. Only one cue plays at a time; repeated multiplayer snapshots do not replay sounds.
+
 ## How the integration works
 
 The wire contract is **`refract-activity/1`**, through the small, dependency-free [bridge](src/bridge.js) shared with [refract-tack-toe](https://github.com/Celzor/refract-tack-toe). Messages within the activity use `uni-refract/1`, the Refract session ID, and the elected host ID.
@@ -107,6 +109,7 @@ This is a cooperative casual-game protocol, not an anti-cheat service: the host�
 | [`src/local.js`](src/local.js) | The offline practice table |
 | [`src/bridge.js`](src/bridge.js) | Refract postMessage boundary |
 | [`src/app.js`](src/app.js) | UI and wiring for both modes |
+| [`src/audio.js`](src/audio.js) | Quiet sound cues, event deduplication, and mute control |
 | [`tools/preview.html`](tools/preview.html) | Multi-frame Refract protocol simulator |
 | [`tests/`](tests/) | Rules, randomized whole-game play, synchronization, bots, bridge, page markup, and static-serving checks |
 
@@ -136,3 +139,5 @@ It accepts `TEST_URL` (defaults to `http://127.0.0.1:4173/`), `PLAYWRIGHT_MODULE
 ## License
 
 GNU GPL v3, matching refract-tack-toe, whose bridge and tooling this project adapts. See [LICENSE](LICENSE).
+
+Sound effects are adapted from [Kenney Interface Sounds](https://kenney.nl/assets/interface-sounds), released under **CC0 1.0** (royalty-free, including commercial use). Source filenames and processing details are in [audio credits](assets/audio/CREDITS.txt); the pack’s original [license notice](assets/audio/LICENSE.txt) ships with the game.

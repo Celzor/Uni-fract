@@ -326,6 +326,24 @@ test('departing players are replaced by a waiting spectator or removed; a lone p
   assert.equal(abandonRound(table).phase, 'lobby');
 });
 
+test('log event IDs survive host recovery independently of card counts', () => {
+  const table = playing({ hands: [['b1', 'g2'], ['b2', 'g3'], ['b3', 'g4']], draw: ['r4'] });
+  table.logSeq = 50;
+  const drawn = applyAction(table, 1, { type: 'draw', seq: table.turnSeq });
+  assert.equal(drawn.log.at(-1).n, 1);
+  assert.equal(drawn.log.at(-1).seq, 51);
+  const view = viewFor(drawn, 1);
+  const reports = new Map(drawn.seats.map((id) => [id, viewFor(drawn, id)]));
+  const rebuilt = rebuildTable(view, reports, seeded(3));
+  assert.equal(rebuilt.logSeq, 52);
+  assert.equal(rebuilt.log.at(-1).seq, 52);
+  assert.ok(isValidTable(rebuilt));
+
+  // Old snapshots remain readable while their coordinator is being upgraded.
+  for (const entry of view.log) delete entry.seq;
+  assert.ok(isValidTable(rebuildTable(view, reports, seeded(3))));
+});
+
 test('a table can be rebuilt from one player’s view and the hands everyone reports', () => {
   const table = playing({ seats: [1, 2, 3], hands: [['g1', 'g2'], ['b2', 'b3', 'w'], ['y4']], discard: ['r9', 'r3'] });
   const view = viewFor(table, 2);
