@@ -75,7 +75,8 @@ h1 span { color: var(--cyan); }
 .seat-row .tags { margin-left: auto; display: flex; gap: 5px; flex-wrap: wrap; justify-content: flex-end; }
 .tag { font-size: 9px; letter-spacing: .9px; text-transform: uppercase; color: var(--muted); border: 1px solid var(--line); border-radius: 20px; padding: 2px 7px; white-space: nowrap; }
 .tag.you { color: var(--cyan); border-color: color-mix(in srgb, var(--cyan) 45%, transparent); }
-.seat-row.empty { border-style: dashed; color: var(--faint); font-size: 12px; justify-content: center; }
+.seat-row.empty { border-style: dashed; color: var(--faint); font-size: 12px; justify-content: center; flex-wrap: wrap; column-gap: 14px; row-gap: 6px; text-align: center; }
+.seat-row.empty .text-button { font-size: 12px; font-weight: 600; }
 .avatar { --ring: var(--line); width: 32px; height: 32px; flex: 0 0 auto; border-radius: 50%; display: grid; place-items: center; font-weight: 750; font-size: 13px; color: var(--text); background: var(--raised); box-shadow: 0 0 0 2px var(--ring); }
 .watchers { color: var(--muted); font-size: 11px; margin-top: 12px; overflow-wrap: anywhere; }
 #seat-toggle { margin-top: 14px; }
