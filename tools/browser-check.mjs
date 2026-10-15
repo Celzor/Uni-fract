@@ -129,6 +129,12 @@ try {
     assert.equal(await taylor.locator('#deal').isDisabled(), true);
   });
 
+  await check('the host adds a computer player that everyone sees', async () => {
+    await alex.locator('select[name="bots"]').selectOption('1');
+    await eventually('guest sees the bot seat', async () => (await sam.locator('#seat-list').textContent()).includes('PrismBot'));
+    assert.equal(await sam.locator('select[name="bots"]').isDisabled(), true);
+  });
+
   await check('each player is dealt a private hand', async () => {
     await alex.locator('#deal').click();
     for (const view of [alex, sam, taylor]) await eventually('seven cards', async () => (await view.locator('#hand .card').count()) === 7);
@@ -136,13 +142,14 @@ try {
     assert.equal(new Set(hands.map((hand) => JSON.stringify(hand))).size, 3);
   });
 
-  await check('turns pass around the table', async () => {
+  await check('turns pass around the table, bot included', async () => {
     const actions = [];
-    for (let i = 0; i < 12; i += 1) {
+    for (let i = 0; i < 20; i += 1) {
       actions.push(await takeAnyTurn([alex, sam, taylor]));
       await delay(300);
     }
     assert.ok(actions.filter((action) => action !== 'wait').length >= 8, actions.join(','));
+    await eventually('the bot has moved', async () => (await sam.locator('#log li').allTextContents()).some((line) => line.startsWith('Prism ')), 15000);
   });
 
   const jordan = frame(page, 4);
@@ -164,6 +171,12 @@ try {
       await delay(300);
     }
     await page.screenshot({ path: join(artifacts, 'shared-preview.png') });
+  });
+
+  await check('the new host keeps playing the bot', async () => {
+    const botsTurn = async () => /^Prism(’s turn| is facing| drew)/.test(await sam.locator('#status').textContent());
+    await eventually('the bot’s turn comes round', async () => (await botsTurn()) || (await takeAnyTurn([sam, taylor, jordan]), false), 30000);
+    await eventually('the bot moves on', async () => !(await botsTurn()), 10000);
   });
 
   assert.deepEqual(errors, [], `Browser errors: ${errors.join('\n')}`);

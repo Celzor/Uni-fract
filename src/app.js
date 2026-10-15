@@ -1,7 +1,7 @@
 import { connectActivity } from './bridge.js';
 import { COLOR_NAMES, cardImage, cardName, colorOf, isWild, rankName, rankOf, sortHand } from './cards.js';
-import { MAX_BOTS, MIN_BOTS, createLocalGame } from './local.js';
-import { MAX_PLAYERS, MIN_PLAYERS, choicesFor, topCard } from './rules.js';
+import { createLocalGame } from './local.js';
+import { MAX_PLAYERS, MIN_PLAYERS, botName, choicesFor, isBotId, topCard } from './rules.js';
 import { createSession } from './session.js';
 
 const $ = (id) => document.getElementById(id);
@@ -44,7 +44,10 @@ function readSoundPreference() {
 
 const me = () => live?.self?.id ?? null;
 const isMe = (id) => id !== null && id === me();
-const nameOf = (id) => (isMe(id) ? 'You' : names.get(id) ?? 'A player');
+const nameOf = (id) => {
+  if (isMe(id)) return 'You';
+  return isBotId(id) ? botName(id) : names.get(id) ?? 'A player';
+};
 const objectName = (id) => (isMe(id) ? 'you' : nameOf(id));
 const possessive = (id) => (isMe(id) ? 'Your' : `${nameOf(id)}’s`);
 const plural = (count, word) => `${count} ${word}${count === 1 ? '' : 's'}`;
@@ -148,7 +151,7 @@ function renderLobby(view) {
     const tags = node('span', 'tags');
     if (isMe(id) && names.get(id) !== 'You') tags.append(node('span', 'tag you', 'You'));
     if (id === live?.hostId && embedded) tags.append(node('span', 'tag', 'Host'));
-    if (people.find((person) => person.id === id)?.bot) tags.append(node('span', 'tag', 'Bot'));
+    if (isBotId(id)) tags.append(node('span', 'tag', 'Bot'));
     if (view?.scores?.[id]) tags.append(node('span', 'tag', `${view.scores[id]} pts`));
     row.append(tags);
     return row;
@@ -160,13 +163,6 @@ function renderLobby(view) {
   const watching = people.filter((person) => !seats.includes(person.id));
   $('watchers').hidden = watching.length === 0;
   $('watchers').textContent = `Watching · ${watching.map((person) => (isMe(person.id) ? 'You' : person.name)).join(', ')}`;
-
-  $('bot-setup').hidden = embedded;
-  if (!embedded && live) {
-    $('bot-count').textContent = String(live.botCount);
-    $('bots-less').disabled = live.botCount <= MIN_BOTS;
-    $('bots-more').disabled = live.botCount >= MAX_BOTS;
-  }
 
   const toggle = $('seat-toggle');
   toggle.hidden = !view || self === null;
@@ -185,7 +181,7 @@ function renderLobby(view) {
   deal.firstChild.textContent = host ? 'Deal the cards ' : 'Waiting for the host ';
   let note;
   if (!view) note = embedded ? 'Connecting to your call…' : 'Setting up the table…';
-  else if (!enough) note = embedded ? 'You need at least two players. Invite someone from your call.' : 'Add a computer player to start.';
+  else if (!enough) note = embedded ? 'You need at least two players. Invite someone from your call, or add computer players.' : 'Add a computer player to start.';
   else if (view.matchWinner !== null) note = `${nameOf(view.matchWinner)} won the last match. The next deal starts a new one.`;
   else if (host) note = `${plural(seats.length, 'player')} ready. Deal when you’re set.`;
   else note = `${nameOf(live?.hostId)} deals when everyone’s ready.`;
@@ -256,7 +252,8 @@ function renderSeats(view) {
     const copy = node('span', 'seat-copy');
     copy.append(node('strong', '', nameOf(id)));
     const score = view.scores[id] ?? 0;
-    copy.append(node('span', 'seat-sub', view.phase === 'playing' ? `${plural(count, 'card')} · ${score} pts` : `${score} pts`));
+    const sub = view.phase === 'playing' ? `${plural(count, 'card')} · ${score} pts` : `${score} pts`;
+    copy.append(node('span', 'seat-sub', isBotId(id) ? `${sub} · bot` : sub));
     element.append(avatar, copy);
     if (view.phase === 'playing' && !isMe(id)) {
       const fan = node('span', 'mini-fan');
@@ -575,8 +572,6 @@ $('seat-toggle').addEventListener('click', () => {
 });
 $('settings').addEventListener('change', () => send({ type: 'settings', settings: readSettings() }));
 $('settings').addEventListener('submit', (event) => event.preventDefault());
-$('bots-less').addEventListener('click', () => controller?.setBots?.(live.botCount - 1));
-$('bots-more').addEventListener('click', () => controller?.setBots?.(live.botCount + 1));
 $('quit-local').addEventListener('click', () => controller?.abandon?.());
 $('sound').addEventListener('click', () => {
   soundOn = !soundOn;
@@ -644,7 +639,7 @@ if (embedded) {
       render();
     },
   });
-  controller = { act: (action) => local.act(action), setBots: (count) => local.setBots(count), abandon: () => local.abandon(), destroy: () => local.destroy() };
+  controller = { act: (action) => local.act(action), abandon: () => local.abandon(), destroy: () => local.destroy() };
   local.start();
 }
 

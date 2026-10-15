@@ -8,7 +8,18 @@ export const LOG_LIMIT = 12;
 export const VISIBLE_DISCARD = 6;
 const PHASES = Object.freeze(['lobby', 'playing', 'roundOver']);
 
+/**
+ * Computer players use negative ids, so they can never collide with Refract
+ * user ids. The coordinating copy plays their turns.
+ */
+export const BOT_NAMES = Object.freeze(['Prism', 'Lumen', 'Halo', 'Glint', 'Spectra']);
+export const MAX_BOTS = BOT_NAMES.length;
+export const isBotId = (id) => Number.isSafeInteger(id) && id < 0 && id >= -MAX_BOTS;
+export const botIds = (settings) => Array.from({ length: settings.bots }, (_, index) => -(index + 1));
+export const botName = (id) => BOT_NAMES[-id - 1];
+
 export const SETTING_OPTIONS = Object.freeze({
+  bots: Object.freeze([0, 1, 2, 3, 4, 5]),
   turnTimer: Object.freeze([0, 10, 15, 20, 30, 45, 60]),
   stacking: Object.freeze(['off', 'same', 'progressive']),
   jumpIn: Object.freeze([true, false]),
@@ -22,6 +33,7 @@ export const SETTING_OPTIONS = Object.freeze({
 });
 
 export const DEFAULT_SETTINGS = Object.freeze({
+  bots: 0,
   turnTimer: 30,
   stacking: 'same',
   jumpIn: true,
@@ -38,8 +50,9 @@ const clone = (value) => structuredClone(value);
 const isRecord = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 const isId = (value) => Number.isSafeInteger(value) && value > 0;
 const isCount = (value) => Number.isSafeInteger(value) && value >= 0;
-const isIdList = (value, max = Infinity) => Array.isArray(value) && value.length <= max
-  && value.every(isId) && new Set(value).size === value.length;
+const isPlayerId = (value) => isId(value) || isBotId(value);
+const isIdList = (value, max = Infinity, valid = isId) => Array.isArray(value) && value.length <= max
+  && value.every(valid) && new Set(value).size === value.length;
 const isCardList = (value) => Array.isArray(value) && value.every(isCard) && new Set(value).size === value.length;
 
 export function normalizeSettings(input, base = DEFAULT_SETTINGS) {
@@ -234,13 +247,25 @@ function resetCallsAfterShuffle(s) {
   s.exposed = null;
 }
 
+// People take seats first, in arrival order. Computer players fill whatever is
+// left and give their seats up when people arrive.
 function seatMembers(s, memberIds) {
-  s.sittingOut = s.sittingOut.filter((id) => memberIds.includes(id));
-  s.seats = s.seats.filter((id) => memberIds.includes(id) && !s.sittingOut.includes(id));
-  for (const id of memberIds) {
-    if (s.seats.length >= MAX_PLAYERS) break;
-    if (!s.seats.includes(id) && !s.sittingOut.includes(id)) s.seats.push(id);
+  const people = memberIds.filter(isId);
+  s.sittingOut = s.sittingOut.filter((id) => people.includes(id));
+  const seatedPeople = s.seats.filter((id) => people.includes(id) && !s.sittingOut.includes(id));
+  for (const id of people) {
+    if (seatedPeople.length >= MAX_PLAYERS) break;
+    if (!seatedPeople.includes(id) && !s.sittingOut.includes(id)) seatedPeople.push(id);
   }
+  const room = MAX_PLAYERS - seatedPeople.length;
+  const bots = botIds(s.settings);
+  const seatedBots = s.seats.filter((id) => bots.includes(id)).slice(0, room);
+  for (const id of bots) {
+    if (seatedBots.length >= room) break;
+    if (!seatedBots.includes(id)) seatedBots.push(id);
+  }
+  const chosen = [...seatedPeople, ...seatedBots];
+  s.seats = [...s.seats.filter((id) => chosen.includes(id)), ...chosen.filter((id) => !s.seats.includes(id))];
 }
 
 function clearRound(s) {
@@ -496,7 +521,8 @@ function doSeat(s, playerId, watch, memberIds) {
 }
 
 function replaceDeparted(s, memberIds, random) {
-  for (const id of s.seats.filter((seated) => !memberIds.includes(seated))) {
+  // Computer players never leave mid-round; only people come and go.
+  for (const id of s.seats.filter((seated) => !isBotId(seated) && !memberIds.includes(seated))) {
     const index = s.seats.indexOf(id);
     const substitute = memberIds.find((member) => !s.seats.includes(member) && !s.sittingOut.includes(member));
     addLog(s, { k: 'left', by: id });
@@ -540,9 +566,9 @@ function replaceDeparted(s, memberIds, random) {
  * chosen against, so a click made before someone jumped in is rejected.
  */
 export function applyAction(state, playerId, action, { hostId = null, memberIds = null, random = Math.random } = {}) {
-  if (!isRecord(action) || !isId(playerId)) return null;
+  if (!isRecord(action) || !isPlayerId(playerId)) return null;
   const s = clone(state);
-  const members = Array.isArray(memberIds) ? memberIds : [...s.seats];
+  const members = Array.isArray(memberIds) ? memberIds : s.seats.filter(isId);
   const onTurn = () => s.phase === 'playing' && s.current === playerId && action.seq === s.turnSeq;
   let ok = false;
   switch (action.type) {
@@ -559,6 +585,8 @@ export function applyAction(state, playerId, action, { hostId = null, memberIds 
       const next = normalizeSettings(action.settings, s.settings);
       ok = JSON.stringify(next) !== JSON.stringify(s.settings);
       s.settings = next;
+      // Adding or removing computer players changes who is seated.
+      seatMembers(s, members);
       break;
     }
     case 'lobby':
@@ -732,22 +760,24 @@ export function rebuildTable(view, reports = new Map(), random = Math.random) {
 const validLog = (log) => Array.isArray(log) && log.length <= LOG_LIMIT
   && log.every((entry) => isRecord(entry) && isCount(entry.n) && typeof entry.k === 'string');
 const validScores = (scores) => isRecord(scores)
-  && Object.entries(scores).every(([key, value]) => /^[1-9]\d*$/.test(key) && isCount(value));
+  && Object.entries(scores).every(([key, value]) => /^-?[1-9]\d*$/.test(key) && isPlayerId(Number(key)) && isCount(value));
 const validReveal = (reveal) => Array.isArray(reveal) && reveal.length <= MAX_PLAYERS
-  && reveal.every((entry) => isRecord(entry) && isId(entry.id) && isCardList(entry.cards) && isCount(entry.points));
-const validLastPlay = (play) => play === null || (isRecord(play) && isId(play.by) && isCard(play.card));
-const optionalId = (value) => value === null || isId(value);
+  && reveal.every((entry) => isRecord(entry) && isPlayerId(entry.id) && isCardList(entry.cards) && isCount(entry.points));
+const validLastPlay = (play) => play === null || (isRecord(play) && isPlayerId(play.by) && isCard(play.card));
+const optionalPlayer = (value) => value === null || isPlayerId(value);
 
 function validCommon(t) {
   return isRecord(t) && PHASES.includes(t.phase)
     && ['round', 'revision', 'turnSeq', 'turnNo', 'pendingDraw', 'roundPoints'].every((key) => isCount(t[key]))
     && validSettings(t.settings)
-    && isIdList(t.seats, MAX_PLAYERS) && isIdList(t.sittingOut)
+    // Seats hold people, or only the computer players the host added.
+    && isIdList(t.seats, MAX_PLAYERS, isPlayerId) && t.seats.every((id) => isId(id) || botIds(t.settings).includes(id))
+    && isIdList(t.sittingOut)
     && validScores(t.scores) && Array.isArray(t.discard) && t.discard.every(isCard)
     && (t.direction === 1 || t.direction === -1) && (t.stage === 'play' || t.stage === 'drawn')
-    && isIdList(t.called) && optionalId(t.exposed) && optionalId(t.winner) && optionalId(t.matchWinner)
+    && isIdList(t.called, Infinity, isPlayerId) && optionalPlayer(t.exposed) && optionalPlayer(t.winner) && optionalPlayer(t.matchWinner)
     && validLastPlay(t.lastPlay) && validReveal(t.reveal) && validLog(t.log)
-    && (t.wd4 === null || (isRecord(t.wd4) && isId(t.wd4.by)));
+    && (t.wd4 === null || (isRecord(t.wd4) && isPlayerId(t.wd4.by)));
 }
 
 function validPlaying(t, counts) {
@@ -782,7 +812,7 @@ export function isValidView(v, memberIds = null, viewerId = null) {
     if (!validCommon(v) || !isCount(v.drawCount) || !isCount(v.discardCount)) return false;
     if (v.discard.length > VISIBLE_DISCARD || v.discardCount < v.discard.length) return false;
     if (v.drawCount + v.discardCount > DECK_SIZE || !Array.isArray(v.counts)) return false;
-    if (memberIds && !v.seats.every((id) => memberIds.includes(id))) return false;
+    if (memberIds && !v.seats.every((id) => isBotId(id) || memberIds.includes(id))) return false;
     const seat = viewerId === null ? -1 : v.seats.indexOf(viewerId);
     if (v.phase !== 'playing') {
       return validResting(v) && v.counts.length === 0 && v.hand === null && v.drawnCard === null;

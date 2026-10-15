@@ -1,7 +1,5 @@
 import { colorOf, drawAmount, isWild, rankOf } from './cards.js';
-import { bestColor, canChallenge, playCheck, smallestHand, viewFor } from './rules.js';
-
-export const BOT_NAMES = Object.freeze(['Prism', 'Lumen', 'Halo', 'Glint', 'Spectra']);
+import { bestColor, canChallenge, isBotId, playCheck, smallestHand, viewFor } from './rules.js';
 
 /** Bots decide from their own view, so they never see another player's hand. */
 function botView(table, botId) {
@@ -64,4 +62,70 @@ export function jumpInCard(table, botId) {
 
 export function handSize(table, botId) {
   return botView(table, botId).hand?.length ?? 0;
+}
+
+/**
+ * Plays the computer players for whichever copy coordinates the table: the
+ * host's browser in a call, or the practice table offline. It only schedules
+ * moves; each one goes through the normal rules via act(id, action).
+ * Call schedule() after every change to the table.
+ */
+export function createBotDriver({ getTable, act, random = Math.random, timers = globalThis, pace = 1 }) {
+  const scheduled = new Set();
+
+  function later(ms, task) {
+    const handle = timers.setTimeout(() => {
+      scheduled.delete(handle);
+      task();
+    }, ms * pace);
+    scheduled.add(handle);
+  }
+
+  function stop() {
+    for (const handle of scheduled) timers.clearTimeout(handle);
+    scheduled.clear();
+  }
+
+  function takeTurn(id) {
+    const table = getTable();
+    if (table?.phase !== 'playing' || table.current !== id) return;
+    const action = chooseTurnAction(table, id, random);
+    if (!action) return;
+    // Bots usually remember to shout before playing their second-to-last card.
+    if (action.type === 'play' && handSize(table, id) === 2 && random() < 0.85) act(id, { type: 'call' });
+    act(id, { ...action, seq: getTable()?.turnSeq });
+  }
+
+  function schedule() {
+    stop();
+    const table = getTable();
+    if (table?.phase !== 'playing') return;
+    const bots = table.seats.filter(isBotId);
+    if (!bots.length) return;
+    const { exposed } = table;
+    if (exposed !== null) {
+      if (isBotId(exposed) && random() < 0.6) later(400 + random() * 1200, () => act(exposed, { type: 'call' }));
+      const catchers = bots.filter((id) => id !== exposed);
+      if (catchers.length) {
+        const catcher = catchers[Math.floor(random() * catchers.length)];
+        later(1500 + random() * 1700, () => act(catcher, { type: 'catch' }));
+      }
+    }
+    for (const id of bots) {
+      if (id === table.current || jumpInCard(table, id) === null || random() >= 0.45) continue;
+      later(450 + random() * 700, () => {
+        const latest = getTable();
+        const card = latest ? jumpInCard(latest, id) : null;
+        if (card !== null) act(id, playAction(viewFor(latest, id), id, card, random));
+      });
+    }
+    if (bots.includes(table.current)) {
+      // Leave a beat to catch a missed shout before the next bot moves on.
+      const delay = (table.stage === 'drawn' ? 600 : 900) + random() * 700 + (exposed !== null ? 1500 : 0);
+      const id = table.current;
+      later(delay, () => takeTurn(id));
+    }
+  }
+
+  return { schedule, stop };
 }

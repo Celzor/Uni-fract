@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { choicesFor, isValidView } from '../src/rules.js';
-import { HUMAN_ID, MAX_BOTS, createLocalGame } from '../src/local.js';
+import { MAX_BOTS, choicesFor, isValidView } from '../src/rules.js';
+import { HUMAN_ID, createLocalGame } from '../src/local.js';
 import { fakeTimers, seeded } from './helpers.js';
 
 function practice({ bots = 3, seed = 5 } = {}) {
@@ -54,7 +54,7 @@ test('an idle human is timed out, and can call, catch and play against bots', ()
     else if (choices.call) game.act({ type: 'call' });
     else if (view.current === HUMAN_ID) {
       const card = choices.playable.find((value) => !choices.jumpIns.includes(value));
-      if (card !== undefined) game.act({ type: 'play', card, color: 'b', target: 2, seq: view.turnSeq });
+      if (card !== undefined) game.act({ type: 'play', card, color: 'b', target: -1, seq: view.turnSeq });
       else if (choices.draw) game.act({ type: 'draw', seq: view.turnSeq });
       else if (choices.keep) game.act({ type: 'keep', seq: view.turnSeq });
     }
@@ -64,18 +64,19 @@ test('an idle human is timed out, and can call, catch and play against bots', ()
   game.destroy();
 });
 
-test('the bot count is adjustable only between rounds', () => {
+test('the number of computer players is a house rule, fixed during a round', () => {
   const h = practice({ bots: 1 });
   const { game } = h;
-  assert.equal(h.state.view.seats.length, 2);
-  game.setBots(99);
+  assert.deepEqual(h.state.view.seats, [HUMAN_ID, -1]);
+  assert.deepEqual(h.state.participants.map((person) => person.id), [HUMAN_ID], 'bots are players, not participants');
+  game.act({ type: 'settings', settings: { bots: MAX_BOTS } });
   assert.equal(h.state.view.seats.length, 1 + MAX_BOTS);
   game.act({ type: 'deal' });
-  game.setBots(1);
-  assert.equal(h.state.view.seats.length, 1 + MAX_BOTS);
+  game.act({ type: 'settings', settings: { bots: 1 } });
+  assert.equal(h.state.view.settings.bots, MAX_BOTS, 'rules cannot change mid-round');
   game.abandon();
   assert.equal(h.state.view.phase, 'lobby');
-  game.setBots(2);
-  assert.deepEqual(h.state.view.seats, [1, 2, 3]);
+  game.act({ type: 'settings', settings: { bots: 2 } });
+  assert.deepEqual(h.state.view.seats, [HUMAN_ID, -1, -2]);
   game.destroy();
 });

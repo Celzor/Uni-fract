@@ -16,7 +16,7 @@ npm run dev
 
 No `npm install` is needed. Open:
 
-- **[The game](http://127.0.0.1:4173/)**: practice against one to five computer players, or sit out and watch the bots play.
+- **[The game](http://127.0.0.1:4173/)**: practice against up to five computer players (three by default), or sit out and watch the bots play.
 - **[Shared activity preview](http://127.0.0.1:4173/tools/preview.html)**: up to seven real game frames connected through a local simulation of Refract’s host protocol. Add and remove participants, refresh a player, change themes, leave as the host, or start a new session.
 
 For another port: `npm run dev -- --port 4200`. Opening `index.html` directly as a `file:` URL will not load browser modules; use the local server.
@@ -34,7 +34,7 @@ For another port: `npm run dev -- --port 4200`. Opening `index.html` directly as
 
 3. Reload Refract so its content security policy picks up the activity origin.
 4. Join a voice channel or private call. Open **Activities** in the call panel and select **Uni-refract**.
-5. Everyone who opens the activity is seated, up to six. The first participant is the host: they pick the house rules and deal.
+5. Everyone who opens the activity is seated, up to six. The first participant is the host: they pick the house rules and deal. Playing alone, or short of players? The host can add up to five computer players.
 
 For development, register `http://127.0.0.1:4173/` on a non-production Refract instance or one with developer mode enabled. A loopback URL points at the machine running each browser, so use HTTPS hosting to play with friends on other machines.
 
@@ -57,6 +57,7 @@ The host sets these in the lobby, or between rounds.
 
 | Rule | Options | What it does |
 | --- | --- | --- |
+| Computer players | None, 1–5 (practice starts with 3) | Bots fill empty seats and play by the same rules: they stack, jump in, shout “Oh no!” (usually), and will catch you if you forget. People always get priority: someone joining between rounds takes a bot’s seat. |
 | Turn timer | Off, 10–60 s (default 30 s) | When time runs out you draw automatically (or take the stacked draws), and your turn ends. A just-drawn card gets at least five seconds of decision time. |
 | Draw stacking | Off · +2 on +2, +4 on +4 · also +4 on +2 | Answer a draw card with your own to pass the growing total to the next player. Whoever can’t (or won’t) takes the lot and loses their turn. |
 | Jump-in | On / off | Play a card identical to the top card (same colour and symbol) out of turn. Play continues from you. You can’t jump in on your own card, and wilds never jump in. |
@@ -86,11 +87,11 @@ Activity frame       Refract host         Other participants
 
 Card games have hidden information, so this goes one step further than tic-tac-toe:
 
-- **The first participant is the host.** Only the host’s copy holds the full table: every hand and the draw pile’s order. It validates every action against Refract’s relayed sender ID, the turn, and a turn sequence number (so a click made just before someone jumped in is refused), and runs the turn timer.
+- **The first participant is the host.** Only the host’s copy holds the full table: every hand and the draw pile’s order. It validates every action against Refract’s relayed sender ID, the turn, and a turn sequence number (so a click made just before someone jumped in is refused), runs the turn timer, and plays the computer players. Bots decide from their own view, so they never see anyone else’s cards.
 - **Each participant gets a private view.** After every change the host sends each participant, addressed to them alone, the public table plus *their own* hand. Other hands and the deck order never leave the host’s browser. Spectators receive no hand.
 - **Late arrivals and reloads** request a snapshot. A small periodic resync recovers any dropped message. The host keeps its full table in `sessionStorage`, scoped by session ID and user, so a host reload resumes exactly where it was.
-- **When the host leaves**, the next participant becomes host and asks everyone for their latest view, which includes their own hand. It adopts the most recent view, keeps every hand that is consistent, re-deals any hand nobody could vouch for (or that two players both claimed), and shuffles the unseen cards into a fresh draw pile. In practice every remaining player keeps their exact cards. A Wild Draw Four that was pending at the hand-over can no longer be challenged, because only the old host knew whether it was a bluff. The same recovery runs if the host reloads with storage unavailable.
-- **Seats follow the call.** Arrivals are seated in the lobby up to six; later arrivals watch. If a player leaves mid-round, the earliest watcher takes over their hand in place; with no watcher, their cards go back into the pile, and with fewer than two players the round returns to the lobby. Anyone can choose to sit out between rounds.
+- **When the host leaves**, the next participant becomes host and asks everyone for their latest view, which includes their own hand. It adopts the most recent view, keeps every hand that is consistent, re-deals any hand nobody could vouch for (or that two players both claimed), and shuffles the unseen cards into a fresh draw pile. In practice every remaining player keeps their exact cards. A Wild Draw Four that was pending at the hand-over can no longer be challenged, because only the old host knew whether it was a bluff. Computer players carry on under the new host, but their hands are re-dealt at the same size, since only the old host knew them. The same recovery runs if the host reloads with storage unavailable.
+- **Seats follow the call.** Arrivals are seated in the lobby up to six; later arrivals watch. If a player leaves mid-round, the earliest watcher takes over their hand in place; with no watcher, their cards go back into the pile, and with fewer than two players the round returns to the lobby. Anyone can choose to sit out between rounds. Computer players never leave mid-round and use negative player IDs, so they can never collide with a Refract user.
 
 Payloads stay far below Refract’s 16 KiB limit (a view is typically under 2 KiB). Names are rendered as text. No Refract credentials or tokens are requested.
 
@@ -102,7 +103,8 @@ This is a cooperative casual-game protocol, not an anti-cheat service: the host�
 | [`src/rules.js`](src/rules.js) | Pure rules engine: every action and house rule, private views, recovery, validation |
 | [`src/session.js`](src/session.js) | Refract session: host authority, per-player snapshots, sync, timers, host hand-over |
 | [`src/clock.js`](src/clock.js) | The host’s turn timer |
-| [`src/bots.js`](src/bots.js), [`src/local.js`](src/local.js) | Computer players and the offline practice table |
+| [`src/bots.js`](src/bots.js) | Computer players: move choice and the driver that plays them for the host |
+| [`src/local.js`](src/local.js) | The offline practice table |
 | [`src/bridge.js`](src/bridge.js) | Refract postMessage boundary |
 | [`src/app.js`](src/app.js) | UI and wiring for both modes |
 | [`tools/preview.html`](tools/preview.html) | Multi-frame Refract protocol simulator |
