@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 600">
+  <rect width="400" height="600" rx="34" fill="#0d1526"/>
+  <path d="M34 30C130 22 262 34 368 26c8 150-4 380 6 548-118 8-230-4-342 6-6-160 6-394-4-550z" fill="none" stroke="#70e3ff" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" opacity=".8"/>
+  <g fill="none" stroke-linecap="round" stroke-width="30" opacity=".9">
+    <path d="M96 190c34-16 64 8 98-6s62-12 92 2" stroke="#ff6b6b"/>
+    <path d="M118 236c40-10 70 10 106-4s60-8 74 4" stroke="#ffd23f"/>
+    <path d="M100 420c36 12 70-12 104 2s58 10 96-4" stroke="#3ddc84"/>
+    <path d="M114 468c30 8 64-10 98 2s62 6 80-6" stroke="#59a8ff"/>
+  </g>
+  <g fill="none" stroke="#eef5ff" stroke-width="20" stroke-linecap="round" stroke-linejoin="round" transform="rotate(-8 196 330)">
+    <path d="M62 384l2-122 48 118 2-120"/>
+    <path d="M160 316c16 0 27 14 27 33 0 18-12 33-28 33-15 0-26-15-26-33 0-19 12-33 27-33z"/>
+    <path d="M206 384l2-122 48 118 2-120"/>
+    <path d="M304 316c16 0 27 14 27 33 0 18-12 33-28 33-15 0-26-15-26-33 0-19 12-33 27-33z"/>
+  </g>
+  <text x="200" y="548" text-anchor="middle" font-family="Segoe Print, Comic Sans MS, cursive" font-size="34" fill="#70e3ff" opacity=".75">refract</text>
+</svg>
