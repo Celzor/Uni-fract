@@ -34,7 +34,7 @@ For another port: `npm run dev -- --port 4200`. Opening `index.html` directly as
 
 3. Reload Refract so its content security policy picks up the activity origin.
 4. Join a voice channel or private call. Open **Activities** in the call panel and select **Uni-refract**.
-5. Everyone who opens the activity is seated, up to six. The first participant is the host: they pick the house rules and deal. Playing alone, or short of players? The host can add up to five computer players.
+5. Everyone who opens the activity is seated, up to six. The first participant is the host: they pick the house rules and deal. Playing alone, or short of players? The host can add up to five computer players, with **Add a computer player** on the open seat or the **Computer players** house rule.
 
 For development, register `http://127.0.0.1:4173/` on a non-production Refract instance or one with developer mode enabled. A loopback URL points at the machine running each browser, so use HTTPS hosting to play with friends on other machines.
 

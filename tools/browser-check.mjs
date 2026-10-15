@@ -133,6 +133,12 @@ try {
     await alex.locator('select[name="bots"]').selectOption('1');
     await eventually('guest sees the bot seat', async () => (await sam.locator('#seat-list').textContent()).includes('PrismBot'));
     assert.equal(await sam.locator('select[name="bots"]').isDisabled(), true);
+    assert.equal(await sam.locator('#seat-list button').count(), 0, 'only the host can add bots');
+    await alex.locator('#seat-list button', { hasText: 'Add a computer player' }).click();
+    await eventually('guest sees the second bot', async () => (await sam.locator('#seat-list').textContent()).includes('LumenBot'));
+    assert.equal(await alex.locator('select[name="bots"]').inputValue(), '2');
+    await alex.locator('select[name="bots"]').selectOption('1');
+    await eventually('back to one bot', async () => !(await sam.locator('#seat-list').textContent()).includes('LumenBot'));
   });
 
   await check('each player is dealt a private hand', async () => {

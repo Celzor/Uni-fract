@@ -1,7 +1,7 @@
 import { connectActivity } from './bridge.js';
 import { COLOR_NAMES, cardImage, cardName, colorOf, isWild, rankName, rankOf, sortHand } from './cards.js';
 import { createLocalGame } from './local.js';
-import { MAX_PLAYERS, MIN_PLAYERS, botName, choicesFor, isBotId, topCard } from './rules.js';
+import { MAX_BOTS, MAX_PLAYERS, MIN_PLAYERS, botName, choicesFor, isBotId, topCard } from './rules.js';
 import { createSession } from './session.js';
 
 const $ = (id) => document.getElementById(id);
@@ -156,7 +156,18 @@ function renderLobby(view) {
     row.append(tags);
     return row;
   });
-  if (seats.length < MAX_PLAYERS) rows.push(node('li', 'seat-row empty', embedded ? 'Open seat · invite someone from your call' : 'Open seat'));
+  if (seats.length < MAX_PLAYERS) {
+    const open = node('li', 'seat-row empty');
+    open.append(node('span', '', embedded ? 'Open seat · invite someone from your call' : 'Open seat'));
+    // The host can fill the seat right here, as well as from the house rules.
+    if (canEditRules(view) && view.settings.bots < MAX_BOTS) {
+      const add = node('button', 'text-button', 'Add a computer player');
+      add.type = 'button';
+      add.addEventListener('click', () => send({ type: 'settings', settings: { bots: view.settings.bots + 1 } }));
+      open.append(add);
+    }
+    rows.push(open);
+  }
   list.replaceChildren(...rows);
   $('seat-count').textContent = `${seats.length} / ${MAX_PLAYERS} SEATS`;
 
@@ -188,9 +199,11 @@ function renderLobby(view) {
   $('lobby-note').textContent = note;
 }
 
+const canEditRules = (view) => !!view && !!live?.isHost && !!live?.connected && view.phase !== 'playing';
+
 function renderSettings(view) {
   const form = $('settings');
-  const editable = !!view && !!live?.isHost && !!live?.connected && view.phase !== 'playing';
+  const editable = canEditRules(view);
   $('rules-owner').textContent = editable ? 'YOU DECIDE' : 'HOST’S CALL';
   for (const element of form.elements) {
     const value = view?.settings?.[element.name];
