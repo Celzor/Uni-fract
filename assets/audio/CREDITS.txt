@@ -1,0 +1,20 @@
+Sound effects: Kenney Interface Sounds 1.0
+Creator: Kenney (https://kenney.nl)
+Source: https://kenney.nl/assets/interface-sounds
+License: Creative Commons Zero 1.0 Universal (CC0)
+https://creativecommons.org/publicdomain/zero/1.0/
+Free for personal, educational, and commercial use; attribution is optional.
+Original pack license is included as LICENSE.txt beside this file.
+
+Game file    Original file in the pack
+turn.wav     Audio/select_001.ogg
+play.wav     Audio/pluck_001.ogg
+draw.wav     Audio/pluck_002.ogg
+call.wav     Audio/bong_001.ogg
+win.wav      Audio/confirmation_003.ogg
+deal.wav     Audio/drop_001.ogg
+
+Adapted for this game: converted to mono 44.1 kHz 16-bit PCM WAV,
+low-pass filtered at 3.5 kHz, with a 3 ms fade-in and 15 ms fade-out.
+Playback gain is reduced further by the game's sound controller.
+These assets are bundled locally; no external audio service is used.

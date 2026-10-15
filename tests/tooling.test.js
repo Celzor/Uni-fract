@@ -23,7 +23,10 @@ async function fixture(t) {
     'assets/mark.svg': '<svg xmlns="http://www.w3.org/2000/svg"/>',
     'assets/cards/r7.png': 'png bytes',
     'assets/cards/notes.txt': 'private card notes',
-    'assets/audio/nudge.mp3': 'mp3 bytes',
+    'assets/audio/turn.wav': 'wav bytes',
+    'assets/audio/LICENSE.txt': 'CC0 audio license',
+    'assets/audio/CREDITS.txt': 'Audio source credits',
+    'assets/audio/notes.txt': 'private audio notes',
     'tools/preview.html': '<h1>Preview</h1>',
     'tools/preview.js': 'export const preview = true;',
     'tools/preview.css': 'body { margin: 0; }',
@@ -83,7 +86,7 @@ test('preview rejects private files, encoded traversal, malformed paths, and wri
   const { server } = await serverFixture(t);
   for (const path of [
     '/.env', '/.git/config', '/src/.env', '/tools/serve.js', '/tests/private.test.js',
-    '/assets/notes.txt', '/assets/cards/notes.txt', '/dist/stale.txt', '/../index.html', '/src/%2e%2e/index.html',
+    '/assets/notes.txt', '/assets/cards/notes.txt', '/assets/audio/notes.txt', '/dist/stale.txt', '/../index.html', '/src/%2e%2e/index.html',
     '/src/%2e%2e/%2e%2e/.env', '/src%5c..%5c.env', '/src/game.js%00', '//index.html',
   ]) {
     assert.equal((await get(server, path)).status, 404, path);
@@ -99,7 +102,8 @@ test('build only includes public files and replaces stale output', async (t) => 
   const { destination, files } = await buildSite({ root });
   assert.equal(destination, join(root, 'dist'));
   assert.deepEqual(files, [
-    'LICENSE', 'assets/audio/nudge.mp3', 'assets/cards/r7.png', 'assets/mark.svg', 'index.html', 'src/game.js', 'styles.css',
+    'LICENSE', 'assets/audio/CREDITS.txt', 'assets/audio/LICENSE.txt', 'assets/audio/turn.wav',
+    'assets/cards/r7.png', 'assets/mark.svg', 'index.html', 'src/game.js', 'styles.css',
     'tools/preview.css', 'tools/preview.html', 'tools/preview.js',
   ]);
   assert.deepEqual((await readdir(destination)).sort(), ['.nojekyll', 'LICENSE', 'assets', 'index.html', 'src', 'styles.css', 'tools']);
@@ -125,7 +129,9 @@ test('card art and sounds are served with the right types', async (t) => {
   const card = await get(server, '/assets/cards/r7.png');
   assert.equal(card.status, 200);
   assert.equal(card.headers['content-type'], 'image/png');
-  const sound = await get(server, '/assets/audio/nudge.mp3');
+  const sound = await get(server, '/assets/audio/turn.wav');
   assert.equal(sound.status, 200);
-  assert.equal(sound.headers['content-type'], 'audio/mpeg');
+  assert.equal(sound.headers['content-type'], 'audio/wav');
+  assert.equal((await get(server, '/assets/audio/LICENSE.txt')).body, 'CC0 audio license');
+  assert.equal((await get(server, '/assets/audio/CREDITS.txt')).body, 'Audio source credits');
 });

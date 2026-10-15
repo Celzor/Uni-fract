@@ -1,4 +1,5 @@
 import { connectActivity } from './bridge.js';
+import { createGameAudio } from './audio.js';
 import { COLOR_NAMES, cardImage, cardName, colorOf, isWild, rankName, rankOf, sortHand } from './cards.js';
 import { createLocalGame } from './local.js';
 import { MAX_BOTS, MAX_PLAYERS, MIN_PLAYERS, botName, choicesFor, isBotId, topCard } from './rules.js';
@@ -19,11 +20,11 @@ let handshakeTimer = null;
 let retryTimer = null;
 let tickTimer = null;
 let pendingChoice = null;
-let lastTurnKey = null;
+let audioSessionKey = null;
 let lastTopKey = null;
 let previousHand = null;
 let soundOn = readSoundPreference();
-const nudge = new Audio('./assets/audio/nudge.mp3');
+const gameAudio = createGameAudio({ enabled: soundOn });
 
 document.body.classList.toggle('embedded', embedded);
 $('call-banner').hidden = embedded;
@@ -112,7 +113,7 @@ function render() {
   else renderLobby(view);
   renderNotice();
   closeStaleChoice(view);
-  announceTurn(view);
+  gameAudio.update(view, me());
   scheduleTick();
 }
 
@@ -508,15 +509,6 @@ function updateTimer() {
   current?.style.setProperty('--timer-color', remaining <= 5000 ? 'var(--orange)' : 'var(--cyan)');
 }
 
-function announceTurn(view) {
-  const key = view?.phase === 'playing' && view.current === me() ? `${view.round}:${view.turnNo}` : null;
-  if (key && key !== lastTurnKey && soundOn) {
-    nudge.currentTime = 0;
-    nudge.play().catch(() => { /* Autoplay can be blocked until the first click. */ });
-  }
-  lastTurnKey = key;
-}
-
 function choose(dialog, card) {
   return new Promise((resolve) => {
     pendingChoice = { dialog, card };
@@ -588,6 +580,7 @@ $('settings').addEventListener('submit', (event) => event.preventDefault());
 $('quit-local').addEventListener('click', () => controller?.abandon?.());
 $('sound').addEventListener('click', () => {
   soundOn = !soundOn;
+  gameAudio.setEnabled(soundOn);
   try { localStorage.setItem(SOUND_KEY, soundOn ? 'on' : 'off'); } catch { /* Preference only. */ }
   renderConnection();
 });
@@ -628,6 +621,11 @@ if (embedded) {
   bridge = connectActivity({
     onInit(message) {
       clearTimeout(handshakeTimer);
+      const key = JSON.stringify([message.sessionId, message.self.id]);
+      if (key !== audioSessionKey) {
+        gameAudio.reset();
+        audioSessionKey = key;
+      }
       document.documentElement.dataset.theme = message.theme;
       session.init(message);
     },
@@ -660,6 +658,7 @@ window.addEventListener('pagehide', () => {
   clearTimeout(handshakeTimer);
   clearInterval(retryTimer);
   clearInterval(tickTimer);
+  gameAudio.destroy();
   controller?.destroy();
   bridge?.destroy();
 });

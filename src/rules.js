@@ -197,7 +197,8 @@ export function smallestHand(table, playerId, counts = table.hands.map((hand) =>
 
 function addLog(s, entry) {
   s.logSeq += 1;
-  s.log = [...s.log, { n: s.logSeq, ...entry }].slice(-LOG_LIMIT);
+  // `n` is also the number of cards drawn; keep a separate stable event ID.
+  s.log = [...s.log, { n: s.logSeq, ...entry, seq: s.logSeq }].slice(-LOG_LIMIT);
 }
 
 function step(s, index, steps) {
@@ -719,7 +720,7 @@ export function rebuildTable(view, reports = new Map(), random = Math.random) {
     roundPoints: view.roundPoints,
     reveal: clone(view.reveal),
     log: clone(view.log),
-    logSeq: Math.max(0, ...view.log.map((entry) => entry.n).filter(isCount)),
+    logSeq: Math.max(0, ...view.log.map((entry) => entry.seq ?? entry.n).filter(isCount)),
   });
   if (t.phase !== 'playing') return t;
 
@@ -758,7 +759,8 @@ export function rebuildTable(view, reports = new Map(), random = Math.random) {
 // ---------------------------------------------------------------------------
 
 const validLog = (log) => Array.isArray(log) && log.length <= LOG_LIMIT
-  && log.every((entry) => isRecord(entry) && isCount(entry.n) && typeof entry.k === 'string');
+  && log.every((entry) => isRecord(entry) && isCount(entry.n) && typeof entry.k === 'string'
+    && (entry.seq === undefined || isCount(entry.seq)));
 const validScores = (scores) => isRecord(scores)
   && Object.entries(scores).every(([key, value]) => /^-?[1-9]\d*$/.test(key) && isPlayerId(Number(key)) && isCount(value));
 const validReveal = (reveal) => Array.isArray(reveal) && reveal.length <= MAX_PLAYERS
