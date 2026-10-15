@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#080d18">
+    <meta name="description" content="No-no, the hand-drawn card game: match colours, stack draws, jump in out of turn, and shout “Oh no!” at one card. Two to six players in a Refract call, or practice against bots.">
+    <title>No-no · Uni-refract</title>
+    <link rel="icon" type="image/svg+xml" href="./assets/favicon.svg">
+    <link rel="stylesheet" href="./styles.css">
+    <script type="module" src="./src/app.js"></script>
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="site-header">
+        <a class="brand" href="./" aria-label="Uni-refract home"><span class="brand-symbol" aria-hidden="true">◈</span><span>refract<span class="brand-divider">/</span><span class="brand-product">uni</span></span></a>
+        <div class="header-tools">
+          <button id="sound" class="chip-button" type="button" aria-pressed="true">Sound on</button>
+          <span id="connection" class="connection"><span class="status-dot"></span><span id="connection-label">Local practice</span></span>
+        </div>
+      </header>
+
+      <main>
+        <section id="lobby" class="lobby" aria-labelledby="lobby-title">
+          <div class="intro">
+            <div>
+              <p class="eyebrow"><span aria-hidden="true">✳</span> Two to six players. Zero mercy.</p>
+              <h1 id="lobby-title">No-<span>no.</span></h1>
+              <p class="intro-copy">Match the colour or the number. Stack the draws. Jump in out of turn. And when you’re down to one card, shout “Oh no!” before anyone catches you.</p>
+            </div>
+            <div class="intro-cards" aria-hidden="true">
+              <img src="./assets/cards/r7.png" alt="">
+              <img src="./assets/cards/wd4.png" alt="">
+              <img src="./assets/cards/gd2.png" alt="">
+            </div>
+          </div>
+
+          <div class="lobby-grid">
+            <section class="panel" aria-labelledby="seats-title">
+              <div class="section-heading"><h2 id="seats-title">At the table</h2><span id="seat-count" class="small-label">0 / 6 SEATS</span></div>
+              <ol id="seat-list" class="seat-list"></ol>
+              <p id="watchers" class="watchers" hidden></p>
+              <div id="bot-setup" class="bot-setup" hidden>
+                <span>Computer players</span>
+                <div class="stepper">
+                  <button id="bots-less" type="button" aria-label="Fewer computer players">−</button>
+                  <output id="bot-count" aria-live="polite">3</output>
+                  <button id="bots-more" type="button" aria-label="More computer players">+</button>
+                </div>
+              </div>
+              <button id="seat-toggle" class="text-button" type="button">Sit out and watch</button>
+              <div id="refract-lobby-tools" class="refract-tools" hidden>
+                <button class="text-button" type="button" data-action="sync">Resync <span aria-hidden="true">↻</span></button>
+                <button class="text-button muted" type="button" data-action="leave">Leave game <span aria-hidden="true">↗</span></button>
+              </div>
+            </section>
+
+            <section class="panel" aria-labelledby="rules-title">
+              <div class="section-heading"><h2 id="rules-title">House rules</h2><span id="rules-owner" class="small-label">HOST’S CALL</span></div>
+              <form id="settings" class="settings">
+                <label class="setting"><span><strong>Turn timer</strong><small>Run out of time and you draw automatically.</small></span>
+                  <select name="turnTimer"><option value="0">Off</option><option value="10">10 s</option><option value="15">15 s</option><option value="20">20 s</option><option value="30">30 s</option><option value="45">45 s</option><option value="60">60 s</option></select></label>
+                <label class="setting"><span><strong>Draw stacking</strong><small>Answer a draw card with one of your own and pass the pain along.</small></span>
+                  <select name="stacking"><option value="off">Off</option><option value="same">+2 on +2, +4 on +4</option><option value="progressive">Also +4 on +2</option></select></label>
+                <label class="setting"><span><strong>Jump-in</strong><small>Play an identical card out of turn and take the turn from there.</small></span>
+                  <input type="checkbox" name="jumpIn" role="switch"></label>
+                <label class="setting"><span><strong>7-0</strong><small>A 7 swaps hands with someone. A 0 passes every hand along.</small></span>
+                  <input type="checkbox" name="sevenZero" role="switch"></label>
+                <label class="setting"><span><strong>Wild Draw Four</strong><small>Bluff it, and anyone you hit may call your bluff.</small></span>
+                  <select name="wildFour"><option value="challenge">Can be challenged</option><option value="anytime">No challenges</option><option value="strict">Only when stuck</option></select></label>
+                <label class="setting"><span><strong>Shout “Oh no!”</strong><small>Forget at one card and anyone can catch you for two more.</small></span>
+                  <input type="checkbox" name="mustCall" role="switch"></label>
+                <label class="setting"><span><strong>Draw to match</strong><small>Keep drawing until you find a card you can play.</small></span>
+                  <input type="checkbox" name="drawToMatch" role="switch"></label>
+                <label class="setting"><span><strong>Forced play</strong><small>If the card you draw can be played, it must be.</small></span>
+                  <input type="checkbox" name="forcePlay" role="switch"></label>
+                <label class="setting"><span><strong>Starting hand</strong><small>Cards dealt to each player.</small></span>
+                  <select name="handSize"><option value="5">5 cards</option><option value="7">7 cards</option><option value="10">10 cards</option></select></label>
+                <label class="setting"><span><strong>Play to</strong><small>Winners score the cards left in everyone else’s hand.</small></span>
+                  <select name="targetScore"><option value="0">Just keep score</option><option value="200">200 points</option><option value="500">500 points</option></select></label>
+              </form>
+              <div class="lobby-actions">
+                <p id="lobby-note" class="lobby-note"></p>
+                <button id="deal" class="primary-button" type="button">Deal the cards <span aria-hidden="true">↗</span></button>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <section id="table" class="table" aria-label="Card table" hidden>
+          <div class="table-main">
+            <div id="opponents" class="opponents" aria-label="Players"></div>
+
+            <div id="felt" class="felt">
+              <div id="play-area" class="play-area">
+                <div class="piles">
+                  <button id="draw-pile" class="draw-pile" type="button" aria-label="Draw a card">
+                    <span class="card-back"></span><span class="card-back"></span><span class="card-back"></span>
+                    <span id="draw-count" class="pile-count"></span>
+                  </button>
+                  <div id="discard" class="discard"></div>
+                </div>
+                <div class="table-meta">
+                  <span id="active-color" class="meta-chip active-color"><span class="swatch" aria-hidden="true"></span><span id="active-color-label">Red</span></span>
+                  <span id="direction" class="meta-chip direction"><span class="direction-icon" aria-hidden="true">↻</span><span id="direction-label">Clockwise</span></span>
+                  <span id="pending" class="meta-chip pending" hidden></span>
+                </div>
+                <div class="turn-banner">
+                  <div id="timer" class="timer" hidden>
+                    <svg viewBox="0 0 36 36" aria-hidden="true"><circle class="timer-track" cx="18" cy="18" r="15.5"></circle><circle id="timer-arc" class="timer-arc" cx="18" cy="18" r="15.5"></circle></svg>
+                    <span id="timer-label">30</span>
+                  </div>
+                  <div class="turn-copy">
+                    <p id="status" role="status" aria-live="polite">Shuffling…</p>
+                    <p id="status-detail"></p>
+                  </div>
+                </div>
+              </div>
+
+              <section id="results" class="results" aria-labelledby="results-title" hidden>
+                <p id="results-eyebrow" class="eyebrow">ROUND COMPLETE</p>
+                <h2 id="results-title">Round over</h2>
+                <p id="results-detail" class="results-detail"></p>
+                <ol id="reveal" class="reveal"></ol>
+                <div class="results-actions">
+                  <button id="back-to-lobby" class="ghost-button" type="button">Change house rules</button>
+                  <button id="next-round" class="primary-button" type="button">Deal next round <span aria-hidden="true">↗</span></button>
+                </div>
+              </section>
+            </div>
+
+            <div id="action-bar" class="action-bar">
+              <button id="call-button" class="call-button" type="button" hidden>OH NO!</button>
+              <button id="catch-button" class="catch-button" type="button" hidden>Catch!</button>
+              <button id="challenge-button" class="ghost-button" type="button" hidden>Challenge the +4</button>
+              <button id="keep-button" class="ghost-button" type="button" hidden>Keep it</button>
+              <button id="draw-button" class="primary-button" type="button" hidden>Draw a card</button>
+            </div>
+
+            <div class="my-seat">
+              <div class="my-name"><span id="my-label">Your hand</span><span id="my-badge" class="called-badge" hidden>OH NO!</span></div>
+              <span id="my-count" class="small-label"></span>
+            </div>
+            <div id="hand" class="hand" role="group" aria-label="Your hand"></div>
+          </div>
+
+          <aside class="table-side">
+            <section class="panel side-panel" aria-labelledby="scores-title">
+              <div class="section-heading"><h2 id="scores-title">Scores</h2><span id="round-label" class="small-label">ROUND 1</span></div>
+              <ol id="scores" class="scores"></ol>
+            </section>
+            <section class="panel side-panel" aria-labelledby="log-title">
+              <div class="section-heading"><h2 id="log-title">Table talk</h2></div>
+              <ol id="log" class="log"></ol>
+            </section>
+            <div class="side-tools">
+              <button id="quit-local" class="text-button muted" type="button" hidden>Abandon round</button>
+              <div id="refract-table-tools" class="refract-tools" hidden>
+                <button class="text-button" type="button" data-action="sync">Resync <span aria-hidden="true">↻</span></button>
+                <button class="text-button muted" type="button" data-action="leave">Leave game <span aria-hidden="true">↗</span></button>
+              </div>
+            </div>
+          </aside>
+        </section>
+
+        <p id="notice" class="notice" role="status" hidden></p>
+
+        <section id="call-banner" class="call-banner">
+          <div class="banner-icon" aria-hidden="true">◈</div>
+          <div><h2>Better with friends on the other end.</h2><p>Open this activity from a Refract call to play together, live. Practice here against the bots.</p></div>
+          <a href="./tools/preview.html">Try the multiplayer preview <span aria-hidden="true">↗</span></a>
+        </section>
+      </main>
+
+      <footer><span>No-no: hand-drawn with love, played over Refract.</span><span>GPL-3.0 · Uni-refract</span></footer>
+    </div>
+
+    <dialog id="color-dialog" class="dialog" aria-labelledby="color-title">
+      <form method="dialog">
+        <h2 id="color-title">Pick a colour</h2>
+        <p class="dialog-copy">Everyone after you has to match it.</p>
+        <div class="color-grid">
+          <button value="r" class="color-option" data-color="r">Red</button>
+          <button value="y" class="color-option" data-color="y">Yellow</button>
+          <button value="g" class="color-option" data-color="g">Green</button>
+          <button value="b" class="color-option" data-color="b">Blue</button>
+        </div>
+        <button value="" class="text-button muted">Cancel</button>
+      </form>
+    </dialog>
+
+    <dialog id="target-dialog" class="dialog" aria-labelledby="target-title">
+      <form method="dialog">
+        <h2 id="target-title">Swap hands with…</h2>
+        <p class="dialog-copy">You take their cards; they take yours.</p>
+        <div id="target-list" class="target-list"></div>
+        <button value="" class="text-button muted">Cancel</button>
+      </form>
+    </dialog>
+
+    <noscript>This activity needs JavaScript to play. Enable JavaScript, then reload this page.</noscript>
+  </body>
+</html>
