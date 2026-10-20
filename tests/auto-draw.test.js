@@ -65,11 +65,10 @@ test('an unanswered draw stack is taken in full, including unchallengeable +4s',
   }
 });
 
-test('playable cards, stack responses, +4 challenges, bots and resting tables do not auto-draw', () => {
+test('playable cards, stack responses, bots and resting tables do not auto-draw', () => {
   const tables = [
     playing({ hands: [['r1', 'g2'], ['r5'], ['y6']] }),
     playing({ hands: [['bd2', 'g2'], ['r5'], ['y6']], discard: ['rd2'], pendingDraw: 2 }),
-    playing({ hands: [['b1', 'g2'], ['r5'], ['y6']], discard: ['wd4'], pendingDraw: 4, wd4: { by: 3, bluff: false } }),
     playing({ seats: [-1, 2, 3], hands: [['b1', 'g2'], ['r5'], ['y6']], settings: { bots: 1 } }),
     createTable(),
     { ...createTable(), phase: 'roundOver' },
@@ -82,6 +81,19 @@ test('playable cards, stack responses, +4 challenges, bots and resting tables do
     assert.equal(h.moves.length, 0);
     assert.equal(h.timers.pending, 0);
   }
+});
+
+test('legacy +4 metadata cannot stop an automatic penalty draw', () => {
+  const table = playing({
+    hands: [['b1', 'g2'], ['r5'], ['y6']], discard: ['wd4'], pendingDraw: 4, wd4: { by: 3, bluff: false },
+  });
+  table.settings.wildFour = 'challenge';
+  const h = driverFor(table);
+  h.driver.schedule();
+  h.timers.advance(AUTO_DRAW_DELAY_MS);
+  assert.equal(h.table.hands[0].length, 6);
+  assert.equal(h.table.settings.wildFour, 'anytime');
+  assert.equal(h.table.pendingDraw, 0);
 });
 
 test('a new state reschedules the draw and a manual draw cancels the waiting automatic draw', () => {

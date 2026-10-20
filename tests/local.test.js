@@ -33,6 +33,14 @@ test('bots play whole rounds among themselves while you watch, under every house
       }
       assert.equal(h.state.view.phase, 'roundOver', `seed ${seed} round ${round} finished`);
       assert.ok(Object.values(h.state.view.scores).some((score) => score > 0));
+      const deadline = h.state.nextRoundAt;
+      assert.equal(deadline, h.state.view.nextRoundAt);
+      game.act({ type: 'deal' });
+      assert.equal(h.state.view.phase, 'roundOver', 'the host cannot deal while the countdown is running');
+      timers.advance(deadline - timers.now() - 1);
+      game.act({ type: 'deal' });
+      assert.equal(h.state.view.phase, 'roundOver', 'one millisecond still remains');
+      timers.advance(1);
     }
     game.destroy();
   }
@@ -103,4 +111,24 @@ test('practice automatically draws a stuck hand, and abandoning or destroying ca
     h.game.destroy();
     assert.equal(h.timers.pending, 0);
   }
+});
+
+test('the host lobby action cancels practice bots and the turn clock while retaining settings', () => {
+  const h = practice({ bots: 2 });
+  h.game.act({ type: 'settings', settings: { turnTimer: 10 } });
+  h.game.act({ type: 'deal' });
+  const settings = h.state.view.settings;
+  assert.ok(h.timers.pending > 0);
+  h.game.act({ type: 'lobby' });
+  const lobby = h.state.view;
+  assert.equal(lobby.phase, 'lobby');
+  assert.deepEqual(lobby.settings, settings);
+  assert.deepEqual(lobby.seats, [HUMAN_ID, -1, -2]);
+  assert.equal(h.state.timerEndsAt, null);
+  assert.equal(h.timers.pending, 0);
+  h.timers.advance(60000);
+  assert.equal(h.state.view.revision, lobby.revision);
+  h.game.act({ type: 'deal' });
+  assert.equal(h.state.view.phase, 'playing');
+  h.game.destroy();
 });

@@ -44,6 +44,9 @@ async function connected(view) {
 
 async function pickIfAsked(view) {
   await delay(100);
+  // A modal is fixed inside its frame; bring that frame into the outer preview
+  // viewport after a card click may have scrolled down to the player's hand.
+  if (typeof view.owner === 'function') await view.owner().scrollIntoViewIfNeeded();
   if (await view.locator('#color-dialog[open]').count()) await view.locator('#color-dialog .color-option[data-color="b"]').click();
   if (await view.locator('#target-dialog[open]').count()) await view.locator('#target-list button').first().click();
 }
@@ -122,6 +125,7 @@ try {
   for (const view of [alex, sam, taylor]) await connected(view);
 
   await check('host rules reach guests, who cannot edit them', async () => {
+    assert.deepEqual(await alex.locator('select[name="wildFour"] option').evaluateAll((options) => options.map((option) => option.value)), ['anytime', 'strict']);
     await alex.locator('select[name="turnTimer"]').selectOption('0');
     await alex.locator('select[name="stacking"]').selectOption('progressive');
     await eventually('guest sees the rule', async () => (await sam.locator('select[name="stacking"]').inputValue()) === 'progressive');
@@ -148,6 +152,26 @@ try {
     assert.equal(new Set(hands.map((hand) => JSON.stringify(hand))).size, 3);
   });
 
+  await check('opponent hands show a visible back for every card in compact frames', async () => {
+    for (const view of [alex, sam, taylor]) {
+      const hands = await view.locator('#opponents .seat-chip').evaluateAll((seats) => seats.map((seat) => {
+        const cards = [...seat.querySelectorAll('.opponent-card')];
+        return {
+          expected: Number(seat.querySelector('.seat-sub').textContent.match(/^\d+/)[0]),
+          shown: cards.length,
+          visible: cards.every((card) => {
+            const box = card.getBoundingClientRect();
+            return card.getAttribute('src') === './assets/card-back.svg' && box.width >= 30 && box.height >= 45;
+          }),
+        };
+      }));
+      for (const hand of hands) {
+        assert.equal(hand.shown, hand.expected);
+        assert.ok(hand.visible);
+      }
+    }
+  });
+
   await check('embedded tables keep the hand inside their frame', async () => {
     for (const view of [alex, sam, taylor]) {
       const fits = await view.locator('body').evaluate(() => {
@@ -162,11 +186,10 @@ try {
 
   await check('turns pass around the table, bot included', async () => {
     const actions = [];
-    for (let i = 0; i < 20; i += 1) {
+    await eventually('eight player actions, allowing automatic draws and bot turns', async () => {
       actions.push(await takeAnyTurn([alex, sam, taylor]));
-      await delay(300);
-    }
-    assert.ok(actions.filter((action) => action !== 'wait').length >= 8, actions.join(','));
+      return actions.filter((action) => action !== 'wait').length >= 8;
+    }, 30000);
     await eventually('the bot has moved', async () => (await sam.locator('#log li').allTextContents()).some((line) => line.startsWith('Al Lunar ')), 15000);
   });
 
@@ -196,6 +219,20 @@ try {
     const botsTurn = async () => /^Al Lunar(’s turn| is facing| drew)/.test(await sam.locator('#status').textContent());
     await eventually('the bot’s turn comes round', async () => (await botsTurn()) || (await takeAnyTurn([sam, taylor, jordan]), false), 30000);
     await eventually('the bot moves on', async () => !(await botsTurn()), 10000);
+  });
+
+  await check('only the host can send everyone back to the lobby during a round', async () => {
+    assert.equal(await sam.locator('#back-to-lobby').isVisible(), true);
+    assert.equal(await taylor.locator('#back-to-lobby').isVisible(), false);
+    assert.equal(await jordan.locator('#back-to-lobby').isVisible(), false);
+    await sam.locator('#back-to-lobby').click();
+    for (const view of [sam, taylor, jordan]) {
+      await eventually('returned to lobby', async () => view.locator('#lobby').isVisible());
+      assert.equal(await view.locator('#table').isVisible(), false);
+      assert.equal(await view.locator('select[name="stacking"]').inputValue(), 'progressive');
+    }
+    await sam.locator('#deal').click();
+    for (const view of [sam, taylor, jordan]) await eventually('new hand dealt', async () => view.locator('#table').isVisible());
   });
 
   assert.deepEqual(errors, [], `Browser errors: ${errors.join('\n')}`);

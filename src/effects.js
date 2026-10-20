@@ -1,7 +1,7 @@
 import { DECK_SIZE, cardImage, rankOf } from './cards.js';
 
 const BACK_IMAGE = 'assets/card-back.svg';
-const COLORS = ['#db6149', '#d4a436', '#72a978', '#629abb', '#f1e0b7'];
+const COLORS = ['#db6149', '#ffd21c', '#72a978', '#1673ed', '#f1e0b7'];
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 const center = (rect) => ({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 });
 const handFor = (view, selfId) => view?.hand ?? view?.reveal?.find((entry) => entry.id === selfId)?.cards ?? [];

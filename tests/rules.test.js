@@ -2,15 +2,15 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { COLORS, DECK_SIZE, FACES, cardName, colorOf, isNumber, points, rankOf, sortHand } from '../src/cards.js';
 import {
-  BOT_NAMES, DEFAULT_SETTINGS, MAX_PLAYERS, abandonRound, applyAction, applyRoster, botName, choicesFor, createTable,
+  BOT_NAMES, DEFAULT_SETTINGS, MAX_PLAYERS, NEXT_ROUND_DELAY_MS, abandonRound, applyAction, applyRoster, botName, choicesFor, createTable,
   expireTurn, isBotId, isValidTable, isValidView, normalizeSettings, rebuildTable, topCard, viewFor,
 } from '../src/rules.js';
 import { chooseTurnAction } from '../src/bots.js';
 import { cardPicker, faces, handOf, playing, seeded } from './helpers.js';
 
 const HOST = 1;
-const act = (table, id, action, members) => applyAction(table, id, { seq: table.turnSeq, ...action }, {
-  hostId: HOST, memberIds: members ?? table.seats, random: seeded(7),
+const act = (table, id, action, members, now = () => 1000) => applyAction(table, id, { seq: table.turnSeq, ...action }, {
+  hostId: HOST, memberIds: members ?? table.seats, random: seeded(7), now,
 });
 const cardIn = (table, id, face) => {
   const card = handOf(table, id).find((value) => FACES[value] === face);
@@ -40,6 +40,8 @@ test('settings are normalized to known options', () => {
     ...DEFAULT_SETTINGS, stacking: 'progressive',
   });
   assert.deepEqual(normalizeSettings(null), DEFAULT_SETTINGS);
+  assert.equal(normalizeSettings({ wildFour: 'challenge' }).wildFour, 'anytime');
+  assert.equal(normalizeSettings({}, { ...DEFAULT_SETTINGS, wildFour: 'challenge' }).wildFour, 'anytime');
 });
 
 test('the lobby seats up to six in arrival order and the host deals a fair opening', () => {
@@ -129,31 +131,25 @@ test('stacking passes draw penalties along until someone takes them', () => {
   assert.deepEqual(choicesFor(four, 2, handOf(four, 2)).playable, [], 'a +2 never answers a +4');
 });
 
-test('Wild Draw Four can be challenged: bluffers draw, honest plays cost the challenger six', () => {
+test('Wild Draw Four applies penalties without bluff challenges and retains the strict option', () => {
   const settings = { stacking: 'off' };
-  let bluff = playing({ hands: [['wd4', 'r1', 'g2'], ['b5', 'b6'], ['y5']], discard: ['r3'], settings });
-  bluff = play(bluff, 1, 'wd4', { color: 'b' });
-  assert.equal(bluff.current, 2);
-  assert.equal(bluff.pendingDraw, 4);
-  assert.equal(viewFor(bluff, 2).wd4.bluff, undefined, 'peers never learn whether it was a bluff');
-  const busted = act(bluff, 2, { type: 'challenge' });
-  assert.equal(handOf(busted, 1).length, 6);
-  assert.equal(busted.current, 2, 'a successful challenger keeps the turn');
-  assert.equal(busted.pendingDraw, 0);
-  assert.equal(busted.log.at(-1).won, true);
+  for (const hand of [['wd4', 'r1', 'g2'], ['wd4', 'g2']]) {
+    const table = play(playing({ hands: [hand, ['b5', 'b6'], ['y5']], settings }), 1, 'wd4', { color: 'b' });
+    assert.equal(table.current, 3);
+    assert.equal(table.pendingDraw, 0);
+    assert.equal(handOf(table, 2).length, 6);
+    assert.equal(table.wd4, null);
+    assert.equal(choicesFor(table, 2, handOf(table, 2)).challenge, false);
+    assert.equal(act(table, 2, { type: 'challenge' }), null);
+  }
 
-  let honest = playing({ hands: [['wd4', 'g2'], ['b5', 'b6'], ['y5']], discard: ['r3'], settings });
-  honest = play(honest, 1, 'wd4', { color: 'b' });
-  const lost = act(honest, 2, { type: 'challenge' });
-  assert.equal(handOf(lost, 2).length, 8);
-  assert.equal(lost.current, 3);
-
-  // Answering a +4 with a +4 is a stack, not a bluff, even while holding the colour.
   let stacked = playing({ hands: [['wd4', 'g2'], ['wd4', 'b5', 'b6'], ['y5']], discard: ['r3'], settings: { stacking: 'same' } });
   stacked = play(stacked, 1, 'wd4', { color: 'b' });
   stacked = play(stacked, 2, 'wd4', { color: 'y' });
-  const fairChallenge = act(stacked, 3, { type: 'challenge' });
-  assert.equal(handOf(fairChallenge, 3).length, 1 + 8 + 2, 'the challenger loses against a legitimate stack');
+  assert.equal(stacked.pendingDraw, 8);
+  assert.equal(act(stacked, 3, { type: 'challenge' }), null);
+  const taken = act(stacked, 3, { type: 'draw' });
+  assert.equal(handOf(taken, 3).length, 9);
 
   const strict = playing({ hands: [['wd4', 'r1'], ['b5'], ['y5']], discard: ['r3'], settings: { wildFour: 'strict' } });
   assert.deepEqual(faces(choicesFor(strict, 1, handOf(strict, 1)).playable), ['r1']);
@@ -161,6 +157,22 @@ test('Wild Draw Four can be challenged: bluffers draw, honest plays cost the cha
   assert.equal(handOf(anytime, 2).length, 5);
   assert.equal(anytime.current, 3);
   assert.equal(choicesFor(anytime, 3, handOf(anytime, 3)).challenge, false);
+});
+
+test('legacy snapshots cannot reenable challenges through choices, actions or bots', () => {
+  const table = playing({
+    seats: [1, -1, 3], hands: [['g2'], ['b5', 'b6'], ['y5']], discard: ['wd4'],
+    current: -1, pendingDraw: 4, wd4: { by: 1, bluff: true }, settings: { bots: 1 },
+  });
+  table.settings.wildFour = 'challenge';
+  assert.equal(choicesFor(table, -1, handOf(table, -1)).challenge, false);
+  assert.equal(act(table, -1, { type: 'challenge' }), null);
+  assert.equal(chooseTurnAction(table, -1, () => 0).type, 'draw');
+  const taken = act(table, -1, { type: 'draw' });
+  assert.equal(taken.settings.wildFour, 'anytime');
+  assert.equal(handOf(taken, -1).length, 6);
+  assert.equal(taken.current, 3);
+  assert.ok(isValidTable(taken));
 });
 
 test('jump-in lets an identical card play out of turn and steals the turn order', () => {
@@ -300,6 +312,43 @@ test('forgetting to shout “Oh no!” with one card left can be caught for two 
   assert.deepEqual(relaxed.called, [1]);
 });
 
+test('a call attached to a legal play protects the last card and logs one audible call', () => {
+  const table = playing({ hands: [['r1', 'r2'], ['b2'], ['y4']] });
+  const next = play(table, 1, 'r1', { call: true });
+  assert.deepEqual(next.called, [1]);
+  assert.equal(next.exposed, null);
+  assert.deepEqual(next.log.map(({ k }) => k), ['play', 'call']);
+  assert.equal(act(next, 1, { type: 'call' }), null);
+  const alreadyCalled = play(act(table, 1, { type: 'call' }), 1, 'r1', { call: true });
+  assert.equal(alreadyCalled.log.filter(({ k }) => k === 'call').length, 1);
+  assert.equal(play(table, 1, 'r1', { call: true, seq: 0 }), null, 'an invalid play cannot create a call');
+});
+
+test('only the host can return a running table to a clean lobby while preserving the match', () => {
+  const table = playing({
+    hands: [['r1', 'g2'], ['b5', 'b6'], ['y5']], discard: ['wd4'], pendingDraw: 4,
+    current: 2, wd4: { by: 1, bluff: true }, called: [3], exposed: 3,
+    scores: { 1: 120, 2: 25, 3: 0 }, lastPlay: { by: 1, card: 107 },
+  });
+  assert.equal(act(table, 2, { type: 'lobby' }), null);
+  const lobby = act(table, 1, { type: 'lobby' });
+  assert.equal(lobby.phase, 'lobby');
+  assert.deepEqual(lobby.seats, table.seats);
+  assert.deepEqual(lobby.scores, table.scores);
+  assert.deepEqual(lobby.settings, table.settings);
+  for (const key of ['hands', 'drawPile', 'discard', 'called', 'reveal']) assert.deepEqual(lobby[key], [], key);
+  for (const key of ['current', 'color', 'drawnCard', 'wd4', 'exposed', 'lastPlay', 'winner']) assert.equal(lobby[key], null, key);
+  assert.equal(lobby.pendingDraw, 0);
+  assert.equal(lobby.roundPoints, 0);
+  assert.ok(lobby.turnSeq > table.turnSeq, 'old turn actions become stale');
+  assert.ok(isValidTable(lobby));
+  assert.equal(act(lobby, 1, { type: 'lobby' }), null);
+  const next = act(lobby, 1, { type: 'deal' });
+  assert.equal(next.phase, 'playing');
+  assert.deepEqual(next.scores, table.scores);
+  assert.ok(isValidTable(next));
+});
+
 test('going out scores everyone else’s cards, finishing draws still land, and matches end at the target', () => {
   let table = playing({ hands: [['rd2'], ['b2', 'w'], ['y4', 'gs']], discard: ['r3'], settings: { targetScore: 200 } });
   table.scores = { 1: 150, 2: 10, 3: 0 };
@@ -314,10 +363,51 @@ test('going out scores everyone else’s cards, finishing draws still land, and 
   assert.ok(isValidTable(table));
   assert.ok(isValidView(viewFor(table, 2), [1, 2, 3], 2));
   assert.equal(act(table, 4, { type: 'deal' }, [1, 2, 3, 4]), null, 'spectators cannot deal the next round');
-  const next = act(table, 2, { type: 'deal' }, [1, 2, 3]);
+  const next = act(table, 2, { type: 'deal' }, [1, 2, 3], () => table.nextRoundAt);
   assert.equal(next.round, 1, 'a new match starts at round one');
   assert.deepEqual(next.scores, { 1: 0, 2: 0, 3: 0 });
   assert.equal(next.current, 1);
+});
+
+test('next rounds wait exactly three seconds for everyone, including through the lobby', () => {
+  const ready = playing({ hands: [['r1'], ['b2'], ['y4']] });
+  const won = play(ready, 1, 'r1');
+  assert.equal(won.nextRoundAt, 1000 + NEXT_ROUND_DELAY_MS);
+  assert.equal(viewFor(won, 2).nextRoundAt, won.nextRoundAt);
+  for (const id of [1, 2, 3]) {
+    assert.equal(act(won, id, { type: 'deal' }, undefined, () => won.nextRoundAt - 1), null);
+    assert.equal(act(won, id, { type: 'deal' }, undefined, () => won.nextRoundAt).phase, 'playing');
+  }
+  const lobby = act(won, 1, { type: 'lobby' });
+  assert.equal(lobby.nextRoundAt, won.nextRoundAt);
+  assert.equal(act(lobby, 1, { type: 'deal' }, undefined, () => won.nextRoundAt - 1), null);
+  const next = act(lobby, 1, { type: 'deal' }, undefined, () => won.nextRoundAt);
+  assert.equal(next.phase, 'playing');
+  assert.equal(next.nextRoundAt, null);
+  assert.equal(act(applyRoster(createTable(), [1, 2]), 1, { type: 'deal' }, undefined, () => 0).phase, 'playing',
+    'a first-ever deal has no delay');
+});
+
+test('winning on a forced timeout play starts the cooldown using the coordinator clock', () => {
+  const table = playing({ hands: [['r1'], ['b2'], ['y4']], settings: { forcePlay: true } });
+  table.stage = 'drawn';
+  table.drawnCard = table.hands[0][0];
+  const won = expireTurn(table, seeded(1), () => 10000);
+  assert.equal(won.phase, 'roundOver');
+  assert.equal(won.nextRoundAt, 10000 + NEXT_ROUND_DELAY_MS);
+  assert.equal(act(won, 1, { type: 'deal' }, undefined, () => 12999), null);
+});
+
+test('old snapshots without a round deadline remain readable, while invalid deadlines are rejected', () => {
+  const legacy = applyRoster(createTable(), [1, 2]);
+  delete legacy.nextRoundAt;
+  assert.ok(isValidTable(legacy));
+  assert.equal(viewFor(legacy, 1).nextRoundAt, null);
+  assert.equal(act(legacy, 1, { type: 'deal' }, undefined, () => 0).phase, 'playing');
+  for (const nextRoundAt of [-1, Infinity, NaN, '3000']) {
+    assert.equal(isValidTable({ ...legacy, nextRoundAt }), false);
+    assert.equal(isValidView({ ...viewFor(legacy, 1), nextRoundAt }, [1, 2], 1), false);
+  }
 });
 
 test('an empty draw pile reshuffles the discards under the top card', () => {
@@ -410,10 +500,10 @@ test('a table can be rebuilt from one player’s view and the hands everyone rep
   assert.equal(rebuilt.current, table.current);
   assert.ok(rebuilt.log.at(-1).k === 'recover');
 
-  // Nobody can know whether a pending +4 was a bluff, so it can no longer be challenged.
-  let hit = playing({ hands: [['wd4', 'r1', 'g2'], ['b5', 'b6'], ['y5']], discard: ['r3'], settings: { stacking: 'off' } });
+  // Pending +4 stacks survive host recovery without creating a challenge.
+  let hit = playing({ hands: [['wd4', 'r1', 'g2'], ['b5', 'b6'], ['y5']], discard: ['r3'], settings: { stacking: 'same' } });
   hit = play(hit, 1, 'wd4', { color: 'b' });
-  assert.equal(choicesFor(hit, 2, handOf(hit, 2)).challenge, true);
+  assert.equal(choicesFor(hit, 2, handOf(hit, 2)).challenge, false);
   const recovered = rebuildTable(viewFor(hit, 2), new Map([[2, { hand: handOf(hit, 2) }]]), seeded(5));
   assert.ok(isValidTable(recovered));
   assert.equal(recovered.pendingDraw, 4);
@@ -482,7 +572,7 @@ function randomSettings(random) {
     sevenZero: random() < 0.5,
     drawToMatch: random() < 0.3,
     forcePlay: random() < 0.3,
-    wildFour: pick(['challenge', 'anytime', 'strict']),
+    wildFour: pick(['anytime', 'strict']),
     mustCall: random() < 0.7,
     handSize: pick([5, 7, 10]),
     targetScore: pick([0, 200]),
@@ -565,7 +655,7 @@ test('rounds rotate the first player and keep scores between rounds', () => {
   assert.equal(first.current, 1);
   const lonely = playing({ hands: [['r1'], ['b2'], ['y4']], discard: ['r3'] });
   const won = play(lonely, 1, 'r1');
-  const second = act(won, 1, { type: 'deal' }, members);
+  const second = act(won, 1, { type: 'deal' }, members, () => won.nextRoundAt);
   assert.equal(second.round, 2);
   assert.equal(second.current, 2);
   assert.equal(second.scores[1], won.scores[1]);

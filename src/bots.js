@@ -1,5 +1,5 @@
 import { colorOf, drawAmount, isWild, rankOf } from './cards.js';
-import { bestColor, canChallenge, isBotId, playCheck, smallestHand, viewFor } from './rules.js';
+import { bestColor, isBotId, playCheck, smallestHand, viewFor } from './rules.js';
 
 /** Bots decide from their own view, so they never see another player's hand. */
 function botView(table, botId) {
@@ -38,8 +38,6 @@ export function chooseTurnAction(table, botId, random = Math.random) {
     return { type: 'keep', seq: view.turnSeq };
   }
   const options = view.hand.filter((card) => playCheck(view, botId, view.hand, card)?.jumpIn === false);
-  // Without a stackable answer, a Wild Draw Four is worth a gamble now and then.
-  if (canChallenge(view, botId) && !options.length && random() < 0.35) return { type: 'challenge', seq: view.turnSeq };
   if (!options.length) return { type: 'draw', seq: view.turnSeq };
   let best = options[0];
   let bestScore = -Infinity;

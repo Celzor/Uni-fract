@@ -14,8 +14,8 @@ export function createLocalGame({ onChange, random = Math.random, now = () => Da
   const bots = Math.min(MAX_BOTS, Math.max(0, botCount));
   let table = applyRoster(createTable({ settings: { bots } }), MEMBERS, random);
   let destroyed = false;
-  const clock = createTurnClock({ now, timers, onExpire: () => commit(expireTurn(table, random)) });
-  const act = (id, action) => commit(applyAction(table, id, action, { hostId: HUMAN_ID, memberIds: MEMBERS, random }));
+  const clock = createTurnClock({ now, timers, onExpire: () => commit(expireTurn(table, random, now)) });
+  const act = (id, action) => commit(applyAction(table, id, action, { hostId: HUMAN_ID, memberIds: MEMBERS, random, now }));
   const driver = createBotDriver({ getTable: () => (destroyed ? null : table), act, random, timers, pace });
   const autoDraw = createAutoDrawDriver({ getTable: () => (destroyed ? null : table), act, timers });
 
@@ -33,6 +33,7 @@ export function createLocalGame({ onChange, random = Math.random, now = () => Da
       recovering: false,
       notice: '',
       timerEndsAt: remaining === null ? null : now() + remaining,
+      nextRoundAt: table.nextRoundAt,
     });
   }
 
