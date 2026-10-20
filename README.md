@@ -53,7 +53,7 @@ Alternatively, run `npm run build` and serve **only `dist/`** from any static HT
 
 ## House rules
 
-The host sets these in the lobby, or between rounds.
+The host sets these in the lobby, or between rounds. **Back to lobby** lets the host end a round early for everyone, keeping scores and settings ready for the next deal. After a completed round, **Next round** counts down for three seconds before anyone can deal again, giving everyone time to read the results. This also applies when starting a new match.
 
 | Rule | Options | What it does |
 | --- | --- | --- |
@@ -62,24 +62,24 @@ The host sets these in the lobby, or between rounds.
 | Draw stacking | Off · +2 on +2, +4 on +4 · also +4 on +2 | Answer a draw card with your own to pass the growing total to the next player. Whoever can’t (or won’t) takes the lot and loses their turn. |
 | Jump-in | On / off | Play a card identical to the top card (same colour and symbol) out of turn, including a second copy on your own card. Play continues from you. Identical +2s add to a pending draw stack; wilds never jump in. |
 | 7-0 | On / off | A 7 swaps your hand with a player you choose. A 0 passes every hand one seat along in the direction of play. |
-| Wild Draw Four | Can be challenged · No challenges · Only when stuck | When challengeable, the player hit can call a bluff. If the player who played it held the active colour, they draw the cards and the challenger plays on; otherwise the challenger draws them plus two more and loses their turn. |
+| Wild Draw Four | Any time (default) · Only when stuck | Play a +4 at any time, or only without a card of the active colour. Bluff challenges are disabled; older saved games switch to Any time. |
 | Shout “Oh no!” | On / off | Press **OH NO!** as you play your second-to-last card (or right after). Forget, and anyone can **Catch** you for two cards until the next player moves. |
 | Draw to match | On / off | Keep drawing until you get a playable card. |
 | Forced play | On / off | A playable drawn card must be played. |
 | Starting hand | 5, 7, 10 | Cards dealt to each player. |
 | Play to | Just keep score · 200 · 500 | The round winner scores everyone else’s cards: face value for numbers, 20 for Skip/Reverse/Draw Two, 50 for wilds. Reaching the target wins the match; the next deal starts a new one. |
 
-Always on: Skip skips the next player; Reverse flips direction (with two players it acts as a Skip); Draw Two and Wild Draw Four make the next player draw and lose their turn unless they can stack or challenge. A drawn card that can be played may be played straight away or kept. Rounds open on a number card, and the first player rotates each round. When the draw pile runs out, the discards are reshuffled under the top card.
+Always on: Skip skips the next player; Reverse flips direction (with two players it acts as a Skip); Draw Two and Wild Draw Four make the next player draw and lose their turn unless they can stack. A drawn card that can be played may be played straight away or kept. Rounds open on a number card, and the first player rotates each round. When the draw pile runs out, the discards are reshuffled under the top card.
 
-If you have no legal card, the table draws for you after a short pause (normally 1.6 seconds, with extra time to catch a missed “Oh no!”). This also takes an unanswered draw stack automatically. A challengeable +4 still waits for your choice to challenge or take the cards. The host controls automatic draws in multiplayer, so cards are only drawn once.
+If you have no legal card, the table draws for you after a short pause (normally 1.6 seconds, with extra time to catch a missed “Oh no!”). This also takes an unanswered draw stack automatically, including +4s. The host controls automatic draws in multiplayer, so cards are only drawn once.
 
 Keyboard: **D** draw, **O** shout “Oh no!”, **C** catch, **K** keep.
 
-Sound uses short, quiet cues for turns, playing and drawing cards, dealing, calls, and round wins. **Sound on / off** mutes every effect and remembers your preference. Only one cue plays at a time; repeated multiplayer snapshots do not replay sounds.
+Sound uses short cues for turns, playing and drawing cards, dealing, and round wins. Calling **OH NO!** plays a bundled human voice recording for everyone, with priority over ordinary card sounds. **Sound on / off** mutes every effect and remembers your preference. Only one cue plays at a time; repeated multiplayer snapshots do not replay sounds.
 
 Cards swoop between hands and piles individually. Drawn cards take a second to arrive, spaced apart so each one is visible; large penalties use tighter spacing to keep the animation brief. Draw Fours land with a heavier impact; stacked penalties show a floating total counting up. Round and match wins have a fanfare and confetti. Motion respects your system’s reduced-motion preference.
 
-Players sit around the felt, with your own seat beside your hand. Refract profile pictures appear when available, with initials as a fallback. A yellow outline and soft glow surround the whole hand area on your turn, with your profile outside it; playable cards lift up. The draw control sits below the deck, with space reserved so turn changes keep the table steady.
+Every opponent has a hand panel above the felt, showing one overlapping card back for each card they hold. These stay visible in compact frames, with counts alongside for larger hands. Your own seat sits beside your face-up hand. Refract profile pictures appear when available, with initials as a fallback. A yellow outline and soft glow surround the whole hand area on your turn, with your profile outside it; playable cards lift up. The draw control sits below the deck, with space reserved so turn changes keep the table steady.
 
 Inside Refract, the table and cards adapt to the frame's height as well as its width. Compact frames put opponents in a strip and move the score pad, table talk, and table tools into **Scores & log**. The **Expand** button requests full screen from Refract. Very short frames retain scrolling inside the game so controls stay reachable; the header and Expand button stay in place.
 
@@ -100,7 +100,7 @@ Card games have hidden information, so this goes one step further than tic-tac-t
 - **The first participant is the host.** Only the host’s copy holds the full table: every hand and the draw pile’s order. It validates every action against Refract’s relayed sender ID, the turn, and a turn sequence number (so a click made just before someone jumped in is refused), runs the turn timer, and plays the computer players. Bots decide from their own view, so they never see anyone else’s cards.
 - **Each participant gets a private view.** After every change the host sends each participant, addressed to them alone, the public table plus *their own* hand. Other hands and the deck order never leave the host’s browser. Spectators receive no hand.
 - **Late arrivals and reloads** request a snapshot. A small periodic resync recovers any dropped message. The host keeps its full table in `sessionStorage`, scoped by session ID and user, so a host reload resumes exactly where it was.
-- **When the host leaves**, the next participant becomes host and asks everyone for their latest view, which includes their own hand. It adopts the most recent view, keeps every hand that is consistent, re-deals any hand nobody could vouch for (or that two players both claimed), and shuffles the unseen cards into a fresh draw pile. In practice every remaining player keeps their exact cards. A Wild Draw Four that was pending at the hand-over can no longer be challenged, because only the old host knew whether it was a bluff. Computer players carry on under the new host, but their hands are re-dealt at the same size, since only the old host knew them. The same recovery runs if the host reloads with storage unavailable.
+- **When the host leaves**, the next participant becomes host and asks everyone for their latest view, which includes their own hand. It adopts the most recent view, keeps every hand that is consistent, re-deals any hand nobody could vouch for (or that two players both claimed), and shuffles the unseen cards into a fresh draw pile. In practice every remaining player keeps their exact cards. Pending draw penalties carry over. Computer players carry on under the new host, but their hands are re-dealt at the same size, since only the old host knew them. The same recovery runs if the host reloads with storage unavailable.
 - **Seats follow the call.** Arrivals are seated in the lobby up to six; later arrivals watch. If a player leaves mid-round, the earliest watcher takes over their hand in place; with no watcher, their cards go back into the pile, and with fewer than two players the round returns to the lobby. Anyone can choose to sit out between rounds. Computer players never leave mid-round and use negative player IDs, so they can never collide with a Refract user.
 
 Payloads stay far below Refract’s 16 KiB limit (a view is typically under 2 KiB). Names are rendered as text. No Refract credentials or tokens are requested.
@@ -126,7 +126,7 @@ This is a cooperative casual-game protocol, not an anti-cheat service: the host�
 
 Card art lives in [`assets/cards`](assets/cards), named by face: colour `r`/`y`/`g`/`b` followed by `0`–`9`, `s` (skip), `r` (reverse) or `d2`, plus `w` and `wd4`.
 
-All 54 faces use matching editable SVGs: cream paper, handwritten strokes, readable coloured inks, and four-colour wild symbols. Yellow keeps its dark ochre design. The source drawing commands are in [`tools/redraw-cards.js`](tools/redraw-cards.js); run `node tools/redraw-cards.js` to regenerate the deck. The older `node tools/redraw-yellow.js` command still regenerates only the yellow faces.
+All 54 faces use matching editable SVGs with handwritten strokes and four-colour wild symbols. Yellow and blue have broad sunny-yellow and saturated-blue fields with dark, readable symbols, so their colours stand out even in small hands. The source drawing commands are in [`tools/redraw-cards.js`](tools/redraw-cards.js); run `node tools/redraw-cards.js` to regenerate the deck. The older `node tools/redraw-yellow.js` command still regenerates only the yellow faces.
 
 ## Development checks
 
@@ -145,12 +145,13 @@ An optional browser smoke test exercises practice mode and the multiplayer previ
 npm install --no-save --package-lock=false playwright
 npx playwright install chromium
 node tools/browser-check.mjs
+node tools/countdown-check.mjs
 ```
 
-It accepts `TEST_URL` (defaults to `http://127.0.0.1:4173/`), `PLAYWRIGHT_MODULE` for an existing Playwright installation, and `PLAYWRIGHT_CHROMIUM_EXECUTABLE` for an existing Chromium-based browser such as Edge or Chrome. Screenshots go to the ignored `artifacts/` folder. A protocol simulator verifies the app’s side of the contract; final acceptance uses signed-in users in an actual Refract call.
+Both checks accept `TEST_URL` (defaults to `http://127.0.0.1:4173/`), `PLAYWRIGHT_MODULE` for an existing Playwright installation, and `PLAYWRIGHT_CHROMIUM_EXECUTABLE` for an existing Chromium-based browser such as Edge or Chrome. The countdown check covers the three-second pause and early deal rejection. Screenshots go to the ignored `artifacts/` folder. A protocol simulator verifies the app’s side of the contract; final acceptance uses signed-in users in an actual Refract call.
 
 ## License
 
 GNU GPL v3, matching refract-tack-toe, whose bridge and tooling this project adapts. See [LICENSE](LICENSE).
 
-Sound effects are adapted from [Kenney Interface Sounds](https://kenney.nl/assets/interface-sounds), released under **CC0 1.0** (royalty-free, including commercial use). Source filenames and processing details are in [audio credits](assets/audio/CREDITS.txt); the pack’s original [license notice](assets/audio/LICENSE.txt) ships with the game.
+The spoken call is an edited excerpt of [“Oh no!” by qubodup](https://freesound.org/people/qubodup/sounds/160548/), licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Other sound effects are adapted from [Kenney Interface Sounds](https://kenney.nl/assets/interface-sounds), released under **CC0 1.0**. Sources and processing details are in [audio credits](assets/audio/CREDITS.txt), also linked from the game; the Kenney pack’s original [license notice](assets/audio/LICENSE.txt) ships with the game.

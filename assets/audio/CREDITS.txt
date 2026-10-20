@@ -1,4 +1,32 @@
-Sound effects: Kenney Interface Sounds 1.0
+Spoken Oh no call: "Oh no!" by qubodup
+Source: https://freesound.org/people/qubodup/sounds/160548/
+Creator: https://freesound.org/people/qubodup/
+License: Creative Commons Attribution 4.0 International (CC BY 4.0)
+https://creativecommons.org/licenses/by/4.0/
+This is a human voice recording, bundled locally as oh-no.wav.
+
+Changes: selected the first complete utterance (0.00-2.80 seconds), mixed
+to mono, reduced gain, filtered low and high frequencies, added short edge
+fades, and converted to 44.1 kHz 16-bit PCM WAV. No speech service is used.
+The remaining takes from the source recording are not included.
+
+Source preview:
+https://cdn.freesound.org/previews/160/160548_71257-hq.mp3
+Source SHA-256:
+99de24b9b94017e0e5c6b711d6168081b07cabf40cd646d59ecb8c2c3e5339e7
+Reproduction (FFmpeg, SOURCE is the downloaded preview):
+ffmpeg -i SOURCE -t 2.8 -af
+"aformat=sample_fmts=fltp:channel_layouts=mono,volume=0.48,
+highpass=f=80,lowpass=f=8000,afade=t=in:d=0.008,
+afade=t=out:st=2.70:d=0.10"
+-ar 44100 -ac 1 -c:a pcm_s16le oh-no.wav
+Join the filter text into a single line before running.
+
+The spoken call plays at volume 0.60 and normal pitch. It outranks card
+effects and turn nudges; mute, hidden updates, disconnect, reset and
+teardown stop it. Catches retain the short interface cue below.
+
+Interface and card sound effects: Kenney Interface Sounds 1.0
 Creator: Kenney (https://kenney.nl)
 Source: https://kenney.nl/assets/interface-sounds
 License: Creative Commons Zero 1.0 Universal (CC0)

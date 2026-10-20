@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DECK_SIZE } from '../src/cards.js';
 import { AUTO_DRAW_DELAY_MS } from '../src/auto-draw.js';
-import { choicesFor, isValidTable } from '../src/rules.js';
+import { NEXT_ROUND_DELAY_MS, choicesFor, isValidTable } from '../src/rules.js';
 import { GAME_PROTOCOL, RECOVERY_WINDOW_MS, createSession } from '../src/session.js';
 import { fakeTimers, playing, seeded } from './helpers.js';
 
@@ -13,7 +13,7 @@ const memoryStorage = () => {
 };
 
 /** An in-memory Refract relay: no echo, optional recipients, roster updates. */
-function network(initialIds = [1, 2, 3], { persistence = true, settings = { turnTimer: 0 } } = {}) {
+function network(initialIds = [1, 2, 3], { persistence = true, settings = { turnTimer: 0 }, clockOffsets = {} } = {}) {
   const clients = new Map();
   const queue = [];
   const sent = [];
@@ -30,7 +30,7 @@ function network(initialIds = [1, 2, 3], { persistence = true, settings = { turn
     client.session = createSession({
       storage: persistence ? stores.get(id) : null,
       random: seeded(seed),
-      now: timers.now,
+      now: () => timers.now() + (clockOffsets[id] ?? 0),
       timers,
       send(data, to) {
         const message = { from: id, data: structuredClone(data), to };
@@ -69,6 +69,7 @@ function network(initialIds = [1, 2, 3], { persistence = true, settings = { turn
 
   const net = {
     clients, sent, queue, timers, stores, flush, settle, init,
+    now: (id) => timers.now() + (clockOffsets[id] ?? 0),
     get members() { return memberIds; },
     view: (id) => clients.get(id).view,
     game: (id) => clients.get(id).view.view,
@@ -365,20 +366,69 @@ test('the host automatically draws for a stuck guest exactly once, including tak
   }
 });
 
-test('a guest with a +4 challenge chooses whether to challenge or take the cards', () => {
+test('a restored legacy +4 challenge becomes a normal penalty and draws automatically', () => {
   const net = network([1, 2, 3]);
-  restorePosition(net, playing({
+  const legacy = playing({
     hands: [['r1', 'r4'], ['b1', 'g2'], ['r5', 'y6']], current: 2,
     discard: ['wd4'], pendingDraw: 4, wd4: { by: 1, bluff: false },
-  }));
+  });
+  legacy.settings.wildFour = 'challenge';
+  restorePosition(net, legacy);
   const before = net.game(2);
-  net.timers.advance(AUTO_DRAW_DELAY_MS * 2);
-  net.flush();
+  assert.equal(before.settings.wildFour, 'anytime');
+  assert.equal(before.wd4, null);
+  assert.equal(choicesFor(before, 2, before.hand).challenge, false);
+  net.act(2, { type: 'challenge' });
   assert.equal(net.game(2).revision, before.revision);
-  net.act(2, { type: 'draw' });
+  net.timers.advance(AUTO_DRAW_DELAY_MS);
+  net.flush();
   assert.equal(net.game(2).hand.length, before.hand.length + 4);
   assert.equal(net.game(2).current, 3);
   net.assertConverged();
+});
+
+test('legacy snapshots received from the host expose only the supported Wild Draw Four rule', () => {
+  const net = network([1, 2, 3]);
+  deal(net);
+  const legacy = structuredClone(net.game(2));
+  legacy.settings.wildFour = 'challenge';
+  net.clients.get(2).session.receive(1, net.packet('state', { view: legacy, members: net.members }));
+  assert.equal(net.game(2).settings.wildFour, 'anytime');
+  assert.equal(net.view(2).connected, true);
+});
+
+test('only the host returns an active game to the lobby and all round timers stop', () => {
+  for (const bots of [0, 1]) {
+    const net = network([1, 2, 3]);
+    restorePosition(net, playing({
+      seats: bots ? [1, 2, -1] : [1, 2, 3],
+      hands: [['r1', 'r4'], ['r5', 'y6'], ['b1', 'g2']], current: bots ? -1 : 3,
+      settings: { turnTimer: 10, bots, jumpIn: false }, scores: { 1: 70, 2: 15 },
+    }));
+    const before = net.game(1);
+    assert.ok(net.view(1).timerEndsAt !== null);
+    assert.ok(net.timers.pending > 0);
+    net.act(2, { type: 'lobby' });
+    assert.equal(net.game(1).phase, 'playing');
+    assert.equal(net.game(1).revision, before.revision);
+    net.act(1, { type: 'lobby' });
+    const lobby = net.game(1);
+    assert.equal(lobby.phase, 'lobby');
+    assert.deepEqual(lobby.scores, before.scores);
+    assert.deepEqual(lobby.settings, before.settings);
+    assert.deepEqual(lobby.discard, []);
+    assert.equal(net.view(1).timerEndsAt, null);
+    assert.equal(net.view(2).timerEndsAt, null);
+    assert.equal(net.timers.pending, 0);
+    net.timers.advance(60000);
+    net.flush();
+    assert.equal(net.game(1).revision, lobby.revision, 'no bot, automatic draw or timeout survives returning to the lobby');
+    net.assertConverged();
+    deal(net);
+    assert.equal(net.game(1).phase, 'playing');
+    assert.deepEqual(net.game(1).scores[1], 70);
+    net.assertConverged();
+  }
 });
 
 test('a new host reschedules a stuck guest draw and cancels the previous host’s pending draw', () => {
@@ -422,9 +472,117 @@ test('only seated players can deal the next round and only the host changes the 
   host.act({ type: 'settings', settings: { stacking: 'off' } });
   net.flush();
   assert.equal(net.game(3).settings.stacking, 'off');
+  net.timers.advance(NEXT_ROUND_DELAY_MS);
   net.act(2, { type: 'deal' });
   assert.equal(net.game(1).phase, 'playing');
   assert.deepEqual(net.game(1).seats, [1, 2, 3, 4]);
+  net.assertConverged();
+});
+
+function winKnownRound(net) {
+  restorePosition(net, playing({ hands: [['r1'], ['b2'], ['y4']] }));
+  net.act(1, { type: 'play', card: net.game(1).hand[0] });
+  assert.equal(net.game(1).phase, 'roundOver');
+}
+
+test('all players share a three-second next-round deadline and premature network deals are refused', () => {
+  const net = network([1, 2, 3]);
+  winKnownRound(net);
+  const won = net.game(1);
+  const deadline = net.now(1) + NEXT_ROUND_DELAY_MS;
+  for (const id of net.members) {
+    assert.equal(net.view(id).nextRoundAt, deadline);
+    assert.equal(net.game(id).nextRoundAt, deadline);
+    net.act(id, { type: 'deal' });
+    assert.equal(net.game(1).revision, won.revision);
+  }
+  net.timers.advance(NEXT_ROUND_DELAY_MS - 1);
+  net.act(2, { type: 'deal' });
+  assert.equal(net.game(1).phase, 'roundOver');
+  net.timers.advance(1);
+  net.act(2, { type: 'deal' });
+  assert.equal(net.game(1).phase, 'playing');
+  for (const id of net.members) assert.equal(net.view(id).nextRoundAt, null);
+  net.assertConverged();
+});
+
+test('repeated snapshots, resync and reload never restart the next-round countdown', () => {
+  const net = network([1, 2, 3]);
+  winKnownRound(net);
+  const deadline = net.view(1).nextRoundAt;
+  const first = net.sent.findLast(({ data, to }) => data.kind === 'state' && data.view.phase === 'roundOver' && to[0] === 2);
+  net.timers.advance(1000);
+  net.clients.get(2).session.receive(1, structuredClone(first.data));
+  assert.equal(net.view(2).nextRoundAt, deadline, 'a delayed copy keeps the original countdown');
+  net.clients.get(2).session.sync();
+  net.flush();
+  net.reload(2);
+  net.reload(1);
+  for (const id of net.members) assert.equal(net.view(id).nextRoundAt, deadline);
+  net.timers.advance(1999);
+  net.act(2, { type: 'deal' });
+  assert.equal(net.game(1).phase, 'roundOver');
+  net.timers.advance(1);
+  net.act(2, { type: 'deal' });
+  assert.equal(net.game(1).phase, 'playing');
+});
+
+test('returning to the lobby cannot bypass the next-round countdown', () => {
+  const net = network([1, 2, 3]);
+  winKnownRound(net);
+  const deadline = net.view(1).nextRoundAt;
+  net.act(1, { type: 'lobby' });
+  assert.equal(net.game(1).phase, 'lobby');
+  assert.equal(net.view(1).nextRoundAt, deadline);
+  net.act(1, { type: 'deal' });
+  assert.equal(net.game(1).phase, 'lobby');
+  net.reload(1);
+  assert.equal(net.view(1).nextRoundAt, deadline);
+  net.timers.advance(NEXT_ROUND_DELAY_MS);
+  net.act(1, { type: 'deal' });
+  assert.equal(net.game(1).phase, 'playing');
+  net.assertConverged();
+});
+
+test('the next-round countdown survives host changes with different device clocks', () => {
+  for (const returnToLobby of [false, true]) {
+    const net = network([1, 2, 3], { clockOffsets: { 1: 100000, 2: 5000, 3: 900000 } });
+    winKnownRound(net);
+    for (const id of net.members) assert.equal(net.view(id).nextRoundAt - net.now(id), NEXT_ROUND_DELAY_MS);
+    if (returnToLobby) net.act(1, { type: 'lobby' });
+    const newHostDeadline = net.view(2).nextRoundAt;
+    net.timers.advance(1000);
+    net.leave(1);
+    assert.equal(net.view(2).isHost, true);
+    assert.equal(net.view(2).recovering, false);
+    assert.equal(net.view(2).nextRoundAt, newHostDeadline);
+    assert.equal(net.hostTable().nextRoundAt, newHostDeadline);
+    for (const id of net.members) assert.equal(net.view(id).nextRoundAt - net.now(id), 2000);
+    net.timers.advance(1999);
+    net.act(2, { type: 'deal' });
+    assert.equal(net.game(2).phase, returnToLobby ? 'lobby' : 'roundOver');
+    net.timers.advance(1);
+    net.act(2, { type: 'deal' });
+    assert.equal(net.game(2).phase, 'playing');
+    net.assertConverged();
+  }
+});
+
+test('a reloaded host without its saved table restores the remaining countdown from peer reports', () => {
+  const net = network([1, 2, 3], { clockOffsets: { 1: 100000, 2: 5000, 3: 900000 } });
+  winKnownRound(net);
+  const deadline = net.view(1).nextRoundAt;
+  net.timers.advance(1000);
+  net.stores.get(1).values.clear();
+  net.reload(1);
+  assert.equal(net.view(1).recovering, false);
+  assert.equal(net.view(1).nextRoundAt, deadline);
+  net.timers.advance(1999);
+  net.act(1, { type: 'deal' });
+  assert.equal(net.game(1).phase, 'roundOver');
+  net.timers.advance(1);
+  net.act(1, { type: 'deal' });
+  assert.equal(net.game(1).phase, 'playing');
   net.assertConverged();
 });
 

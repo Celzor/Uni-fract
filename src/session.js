@@ -2,7 +2,7 @@ import { createBotDriver } from './bots.js';
 import { createAutoDrawDriver } from './auto-draw.js';
 import { createTurnClock } from './clock.js';
 import {
-  applyAction, applyRoster, createTable, expireTurn, isValidTable, isValidView, rebuildTable, viewFor,
+  NEXT_ROUND_DELAY_MS, applyAction, applyRoster, createTable, expireTurn, isValidTable, isValidView, migrateSnapshot, rebuildTable, viewFor,
 } from './rules.js';
 
 export const GAME_PROTOCOL = 'uni-refract/1';
@@ -67,13 +67,13 @@ export function createSession({ send, onChange, storage = browserStorage(), rand
     now,
     timers,
     onExpire() {
-      if (!destroyed && isHost() && table && !recovery) commit(expireTurn(table, random));
+      if (!destroyed && isHost() && table && !recovery) commit(expireTurn(table, random, now));
     },
   });
 
   // Computer players are played by whoever coordinates the table.
   const hosting = () => !destroyed && isHost() && table !== null && !recovery;
-  const actForPlayer = (id, action) => hosting() && commit(applyAction(table, id, action, { hostId, memberIds: ids(), random }));
+  const actForPlayer = (id, action) => hosting() && commit(applyAction(table, id, action, { hostId, memberIds: ids(), random, now }));
   const bots = createBotDriver({
     getTable: () => (hosting() ? table : null),
     act: actForPlayer,
@@ -99,7 +99,8 @@ export function createSession({ send, onChange, storage = browserStorage(), rand
       const raw = storage.getItem(storageKey());
       if (!raw || raw.length > 200000) return null;
       const saved = JSON.parse(raw);
-      return saved?.hostId === self.id && isValidTable(saved.table) ? saved.table : null;
+      const restored = migrateSnapshot(saved?.table);
+      return saved?.hostId === self.id && isValidTable(restored) ? restored : null;
     } catch {
       return null;
     }
@@ -125,6 +126,7 @@ export function createSession({ send, onChange, storage = browserStorage(), rand
       recovering: recovery !== null,
       notice,
       timerEndsAt,
+      nextRoundAt: view?.nextRoundAt ?? null,
     });
   }
 
@@ -144,7 +146,11 @@ export function createSession({ send, onChange, storage = browserStorage(), rand
     const remainingMs = clock.remaining();
     for (const id of targets) {
       if (id === self.id || !isMember(id)) continue;
-      transmit('state', { view: viewFor(table, id), members, remainingMs, ...(replyTo ? { replyTo } : {}) }, [id]);
+      transmit('state', {
+        view: viewFor(table, id), members, remainingMs,
+        nextRoundRemainingMs: nextRoundRemaining(table),
+        ...(replyTo ? { replyTo } : {}),
+      }, [id]);
     }
   }
 
@@ -330,16 +336,36 @@ export function createSession({ send, onChange, storage = browserStorage(), rand
     }
   }
 
+  function nextRoundRemaining(snapshot = view) {
+    return snapshot?.nextRoundAt == null ? null : Math.max(0, snapshot.nextRoundAt - now());
+  }
+
+  /** Hosts and guests may have different wall clocks; exchange the time left. */
+  function localizeNextRound(snapshot, remaining) {
+    if (snapshot.nextRoundAt === null) return snapshot;
+    const left = Number.isFinite(remaining) && remaining >= 0
+      ? Math.min(remaining, NEXT_ROUND_DELAY_MS)
+      : Math.min(Math.max(0, snapshot.nextRoundAt - now()), NEXT_ROUND_DELAY_MS);
+    let deadline = now() + left;
+    if (view?.nextRoundAt !== null && view?.nextRoundAt !== undefined
+      && snapshot.round === view.round && snapshot.turnNo === view.turnNo) {
+      // Repeated or delayed snapshots cannot restart the same countdown.
+      deadline = Math.min(deadline, view.nextRoundAt);
+    }
+    return { ...snapshot, nextRoundAt: deadline };
+  }
+
   function receiveState(from, data) {
+    const incoming = migrateSnapshot(data.view);
     if (isHost() || from !== hostId || !Array.isArray(data.members) ||
-        JSON.stringify(data.members) !== JSON.stringify(ids()) || !isValidView(data.view, ids(), self.id)) return;
+        JSON.stringify(data.members) !== JSON.stringify(ids()) || !isValidView(incoming, ids(), self.id)) return;
     const requested = pendingSync !== null && data.replyTo === pendingSync;
     if (acceptedHostId === hostId && !requested && view && data.view.revision < view.revision) {
       // A fresh request tells a reloaded coordinator apart from delayed old packets.
       sync();
       return;
     }
-    view = clone(data.view);
+    view = clone(localizeNextRound(incoming, data.nextRoundRemainingMs));
     const remaining = data.remainingMs;
     timerEndsAt = Number.isFinite(remaining) && remaining >= 0 ? now() + Math.min(remaining, MAX_TIMER_MS) : null;
     pendingSync = null;
@@ -361,17 +387,23 @@ export function createSession({ send, onChange, storage = browserStorage(), rand
         break;
       case 'action':
         if (!isHost() || !table || recovery) return;
-        if (!commit(applyAction(table, from, data.action, { hostId, memberIds: ids(), random }))) publish([from]);
+        if (!commit(applyAction(table, from, data.action, { hostId, memberIds: ids(), random, now }))) publish([from]);
         break;
       case 'recover':
         if (isHost() || from !== hostId || !validToken(data.requestId)) return;
-        transmit('report', { requestId: data.requestId, view: view && isValidView(view, null, self.id) ? view : null }, [hostId]);
+        transmit('report', {
+          requestId: data.requestId, view: view && isValidView(view, null, self.id) ? view : null,
+          nextRoundRemainingMs: nextRoundRemaining(),
+        }, [hostId]);
         break;
-      case 'report':
+      case 'report': {
         if (!isHost() || !recovery || data.requestId !== recovery.requestId) return;
-        recovery.reports.set(from, data.view !== null && isValidView(data.view, null, from) ? clone(data.view) : null);
+        const reported = migrateSnapshot(data.view);
+        recovery.reports.set(from, reported !== null && isValidView(reported, null, from)
+          ? clone(localizeNextRound(reported, data.nextRoundRemainingMs)) : null);
         maybeFinishRecovery();
         break;
+      }
       default:
         break;
     }
@@ -381,7 +413,7 @@ export function createSession({ send, onChange, storage = browserStorage(), rand
     if (destroyed || !self || !connected || !isMember(self.id) || !action || typeof action !== 'object') return;
     if (isHost()) {
       if (!table || recovery) return;
-      if (!commit(applyAction(table, self.id, action, { hostId, memberIds: ids(), random }))) emit();
+      if (!commit(applyAction(table, self.id, action, { hostId, memberIds: ids(), random, now }))) emit();
     } else {
       transmit('action', { action }, [hostId]);
     }

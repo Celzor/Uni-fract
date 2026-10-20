@@ -8,6 +8,7 @@ const CUES = Object.freeze({
   turn: { volume: 0.28, priority: 4 },
   stack: { volume: 0.3, priority: 5 },
   impact: { volume: 0.34, priority: 6 },
+  'oh-no': { volume: 0.6, priority: 6.5 },
   win: { volume: 0.34, priority: 7 },
   'match-win': { volume: 0.36, priority: 8 },
 });
@@ -21,7 +22,8 @@ function eventCue(entry, view) {
       return amount === 4 ? 'impact' : amount === 2 ? 'stack' : 'play';
     }
     case 'draw': case 'take': return entry.n > 0 ? 'draw' : null;
-    case 'call': case 'catch': case 'challenge': return 'call';
+    case 'call': return 'oh-no';
+    case 'catch': case 'challenge': return 'call';
     case 'deal': return 'deal';
     case 'win': return view.matchWinner != null ? 'match-win' : 'win';
     default: return null;
@@ -38,7 +40,7 @@ function appendedEntries(previous, current) {
   return current;
 }
 
-/** Play at most one quiet cue per public game update, without replaying history. */
+/** Play at most one cue per public game update, without replaying history. */
 export function createGameAudio({
   enabled = true,
   createAudio = (src) => new Audio(src),
@@ -62,7 +64,7 @@ export function createGameAudio({
   }
 
   function play(cue, pendingDraw) {
-    // Let impacts and fanfares finish over ordinary cues. Each newly stacked
+    // Let spoken calls, impacts and fanfares finish over ordinary cues. Each newly stacked
     // card can land its own impact, while celebrations remain the priority.
     // Skipped cues are consumed by update(), so they never queue up afterwards.
     if (active && CUES[active.cue].priority >= CUES.stack.priority
@@ -80,7 +82,7 @@ export function createGameAudio({
       // increase. Reset cached media properties for the next unstacked card.
       const extra = isImpact(cue) ? Math.max(0, (pendingDraw ?? 0) - (cue === 'impact' ? 4 : 2)) : 0;
       sound.volume = CUES[cue].volume + Math.min(0.04, extra * 0.004);
-      sound.preservesPitch = false;
+      sound.preservesPitch = cue === 'oh-no';
       sound.playbackRate = Math.max(0.86, 1 - extra * 0.01);
       const playback = { sound, cue };
       active = playback;

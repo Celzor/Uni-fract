@@ -11,13 +11,6 @@ const $ = (id) => document.getElementById(id);
 const embedded = window.parent !== window || new URLSearchParams(location.search).get('embedded') === '1';
 const SOUND_KEY = 'uni-refract:sound';
 const TIMER_CIRCUMFERENCE = 97.4;
-// Walk around the table from the viewer's left, preserving the seat order.
-const SEAT_POSITIONS = [
-  [], ['north'], ['west', 'east'], ['west', 'north', 'east'],
-  ['west', 'north-west', 'north-east', 'east'],
-  ['west', 'north-west', 'north', 'north-east', 'east'],
-  ['south-west', 'west', 'north-west', 'north-east', 'east', 'south-east'],
-];
 
 // Names seen this session, so the table talk can still name players who left.
 const names = new Map();
@@ -108,7 +101,7 @@ function describe(entry) {
     case 'reshuffle': return ['The discards were shuffled into a fresh deck'];
     case 'left': return [who(entry.by), ' left the table'];
     case 'sub': return [who(entry.by), ' took over the empty seat'];
-    case 'abandon': return ['Not enough players. Back to the lobby.'];
+    case 'abandon': return ['The round ended. Back to the lobby.'];
     case 'win': return [who(entry.by), ` won the round · +${entry.points}`];
     case 'recover': return ['The table was rebuilt after a host change'];
     default: return ['Something happened'];
@@ -212,9 +205,6 @@ function renderLobby(view) {
   renderSettings(view);
   const host = !!live?.isHost && !!live?.connected;
   const enough = seats.length >= MIN_PLAYERS;
-  const deal = $('deal');
-  deal.disabled = !host || !enough || !view;
-  deal.firstChild.textContent = host ? 'Deal the cards ' : 'Waiting for the host ';
   let note;
   if (!view) note = embedded ? 'Connecting to your call…' : 'Setting up the table…';
   else if (!enough) note = embedded ? 'You need at least two players. Invite someone from your call, or add computer players.' : 'Add a computer player to start.';
@@ -263,7 +253,8 @@ function renderTable(view) {
   $('play-area').hidden = over;
   $('results').hidden = !over;
   $('round-label').textContent = `ROUND ${view.round}${view.settings.targetScore ? ` · TO ${view.settings.targetScore}` : ''}`;
-  $('quit-local').hidden = embedded || over;
+  $('table-controls').hidden = !live?.isHost;
+  $('back-to-lobby').disabled = !live?.connected || live?.recovering;
 
   renderSeats(view);
   if (over) renderResults(view);
@@ -296,9 +287,17 @@ function renderSeats(view) {
     copy.append(node('span', 'seat-sub', isBotId(id) ? `${sub} · bot` : sub));
     element.append(avatar, copy);
     if (view.phase === 'playing' && !isMe(id)) {
-      const fan = node('span', 'mini-fan');
+      const fan = node('div', 'opponent-hand');
       fan.setAttribute('aria-hidden', 'true');
-      for (let i = 0; i < Math.min(count, 9); i += 1) fan.append(node('i'));
+      for (let i = 0; i < count; i += 1) {
+        const back = node('img', 'opponent-card');
+        back.src = './assets/card-back.svg';
+        back.alt = '';
+        back.draggable = false;
+        back.style.setProperty('--back-offset', `${count === 1 ? 50 : i / (count - 1) * 100}%`);
+        back.style.setProperty('--back-tilt', `${count === 1 ? 0 : (i / (count - 1) - .5) * 8}deg`);
+        fan.append(back);
+      }
       element.append(fan);
     }
     if (view.called.includes(id)) element.append(node('span', 'badge called', 'OH NO!'));
@@ -308,7 +307,6 @@ function renderSeats(view) {
   });
   const ownSeat = chips.find((element) => element.classList.contains('me'));
   const opponents = chips.filter((element) => element !== ownSeat);
-  opponents.forEach((element, index) => { element.dataset.position = SEAT_POSITIONS[opponents.length][index]; });
   $('opponents').dataset.seatCount = String(opponents.length);
   $('opponents').replaceChildren(...opponents);
   $('self-seat').hidden = !ownSeat;
@@ -366,14 +364,13 @@ function renderStatus(view, choices, seated) {
   let detail;
   if (view.current === self) {
     if (view.pendingDraw > 0) {
-      if (!ownMoves.length && !choices.challenge) {
+      if (!ownMoves.length) {
         status = `No card to stack — taking +${view.pendingDraw}…`;
         detail = 'The cards are coming to you automatically.';
       } else {
         status = `+${view.pendingDraw} coming your way!`;
         const options = [];
         if (ownMoves.length) options.push('stack a draw card to pass it on');
-        if (choices.challenge) options.push('challenge the Wild Draw Four');
         options.push(`take the ${view.pendingDraw}`);
         detail = options.join(', or ').replace(/^./, (letter) => letter.toUpperCase()) + '.';
       }
@@ -406,7 +403,6 @@ function renderActions(view, choices) {
   $('call-button').hidden = over || !choices.call;
   $('catch-button').hidden = over || !choices.catch;
   $('catch-button').textContent = choices.catch ? `Catch ${nameOf(view.exposed)}!` : 'Catch!';
-  $('challenge-button').hidden = over || !choices.challenge;
   $('keep-button').hidden = over || !choices.keep;
   $('draw-button').hidden = over || !choices.draw;
   $('draw-button').textContent = view.pendingDraw ? `Take +${view.pendingDraw}` : 'Draw a card';
@@ -522,12 +518,6 @@ function renderResults(view) {
     item.append(node('span', 'who', nameOf(entry.id)), thumbs, node('span', 'pts', entry.id === winner ? `+${view.roundPoints}` : `${entry.points} pts`));
     return item;
   }));
-  const self = me();
-  const canDeal = (!!live?.isHost || view.seats.includes(self)) && view.seats.length >= MIN_PLAYERS;
-  const next = $('next-round');
-  next.disabled = !canDeal;
-  next.firstChild.textContent = match ? 'Start a new match ' : 'Deal next round ';
-  $('back-to-lobby').hidden = !live?.isHost;
 }
 
 // ---------------------------------------------------------------------------
@@ -537,8 +527,46 @@ function renderResults(view) {
 function scheduleTick() {
   clearInterval(tickTimer);
   tickTimer = null;
-  if (live?.timerEndsAt && live.view?.phase === 'playing') tickTimer = setInterval(updateTimer, 250);
+  if (needsTick()) tickTimer = setInterval(updateTimedControls, 100);
+  updateTimedControls();
+}
+
+function needsTick() {
+  return (live?.timerEndsAt && live.view?.phase === 'playing')
+    || (live?.view?.phase !== 'playing' && live?.nextRoundAt > Date.now());
+}
+
+function updateTimedControls() {
   updateTimer();
+  updateDealButtons();
+  if (!needsTick()) {
+    clearInterval(tickTimer);
+    tickTimer = null;
+  }
+}
+
+function updateDealButtons() {
+  const view = live?.view;
+  if (view?.phase === 'playing') return;
+  const seconds = Math.max(0, Math.ceil(((live?.nextRoundAt ?? 0) - Date.now()) / 1000));
+  const ready = !!live?.connected && !live?.recovering;
+  const enough = (view?.seats.length ?? 0) >= MIN_PLAYERS;
+  const over = view?.phase === 'roundOver';
+  const button = $(over ? 'next-round' : 'deal');
+  const allowed = ready && enough && (live?.isHost || (over && view.seats.includes(me())));
+  button.disabled = !allowed || seconds > 0;
+  let label;
+  if (over) {
+    label = seconds > 0
+      ? `${view.matchWinner !== null ? 'New match' : 'Next round'} in ${seconds}s `
+      : view.matchWinner !== null ? 'Start a new match ' : 'Deal next round ';
+  } else {
+    label = !live?.isHost ? 'Waiting for the host '
+      : seconds > 0 ? `Deal in ${seconds}s ` : 'Deal the cards ';
+  }
+  // Only announce whole-second changes, even though the deadline updates more often.
+  if (button.firstChild.textContent !== label) button.firstChild.textContent = label;
+  button.lastElementChild.hidden = seconds > 0;
 }
 
 function updateTimer() {
@@ -614,7 +642,6 @@ function send(action) {
 $('draw-pile').addEventListener('click', () => send({ type: 'draw' }));
 $('draw-button').addEventListener('click', () => send({ type: 'draw' }));
 $('keep-button').addEventListener('click', () => send({ type: 'keep' }));
-$('challenge-button').addEventListener('click', () => send({ type: 'challenge' }));
 $('call-button').addEventListener('click', () => send({ type: 'call' }));
 $('catch-button').addEventListener('click', () => send({ type: 'catch' }));
 $('deal').addEventListener('click', () => send({ type: 'deal' }));
@@ -626,7 +653,6 @@ $('seat-toggle').addEventListener('click', () => {
 });
 $('settings').addEventListener('change', () => send({ type: 'settings', settings: readSettings() }));
 $('settings').addEventListener('submit', (event) => event.preventDefault());
-$('quit-local').addEventListener('click', () => controller?.abandon?.());
 $('sound').addEventListener('click', () => {
   soundOn = !soundOn;
   gameAudio.setEnabled(soundOn);

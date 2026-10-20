@@ -63,8 +63,8 @@
                   <input type="checkbox" name="jumpIn" role="switch"></label>
                 <label class="setting"><span><strong>7-0</strong><small>A 7 swaps hands with someone. A 0 passes every hand along.</small></span>
                   <input type="checkbox" name="sevenZero" role="switch"></label>
-                <label class="setting"><span><strong>Wild Draw Four</strong><small>Bluff it, and anyone you hit may call your bluff.</small></span>
-                  <select name="wildFour"><option value="challenge">Can be challenged</option><option value="anytime">No challenges</option><option value="strict">Only when stuck</option></select></label>
+                <label class="setting"><span><strong>Wild Draw Four</strong><small>No bluff challenges. Choose when a +4 can be played.</small></span>
+                  <select name="wildFour"><option value="anytime">Any time</option><option value="strict">Only when stuck</option></select></label>
                 <label class="setting"><span><strong>Shout “Oh no!”</strong><small>Forget at one card and anyone can catch you for two more.</small></span>
                   <input type="checkbox" name="mustCall" role="switch"></label>
                 <label class="setting"><span><strong>Draw to match</strong><small>Keep drawing until you find a card you can play.</small></span>
@@ -85,6 +85,9 @@
         </section>
 
         <section id="table" class="table" aria-label="Card table" hidden>
+          <div id="table-controls" class="table-controls" hidden>
+            <button id="back-to-lobby" class="chip-button" type="button" title="End this round and return everyone to the lobby. Scores are kept.">← Back to lobby</button>
+          </div>
           <div class="table-main">
             <div id="table-arena" class="table-arena">
               <div id="opponents" class="opponents" aria-label="Players around the table"></div>
@@ -126,8 +129,7 @@
                   <p id="results-detail" class="results-detail"></p>
                   <ol id="reveal" class="reveal"></ol>
                   <div class="results-actions">
-                    <button id="back-to-lobby" class="ghost-button" type="button">Change house rules</button>
-                    <button id="next-round" class="primary-button" type="button">Deal next round <span aria-hidden="true">↗</span></button>
+                    <button id="next-round" class="primary-button" type="button" aria-live="polite" aria-atomic="true">Deal next round <span aria-hidden="true">↗</span></button>
                   </div>
                 </section>
               </div>
@@ -136,7 +138,6 @@
             <div id="action-bar" class="action-bar">
               <button id="call-button" class="call-button" type="button" hidden>OH NO!</button>
               <button id="catch-button" class="catch-button" type="button" hidden>Catch!</button>
-              <button id="challenge-button" class="ghost-button" type="button" hidden>Challenge the +4</button>
               <button id="keep-button" class="ghost-button" type="button" hidden>Keep it</button>
             </div>
 
@@ -160,7 +161,7 @@
               <ol id="log" class="log"></ol>
             </section>
             <div class="side-tools">
-              <button id="quit-local" class="text-button muted" type="button" hidden>Abandon round</button>
+              <a class="text-button muted" href="./assets/audio/CREDITS.txt" target="_blank" rel="noopener">Sound credits</a>
               <div id="refract-table-tools" class="refract-tools" hidden>
                 <button class="text-button" type="button" data-action="sync">Resync <span aria-hidden="true">↻</span></button>
                 <button class="text-button muted" type="button" data-action="leave">Leave game <span aria-hidden="true">↗</span></button>

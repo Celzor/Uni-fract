@@ -9,8 +9,8 @@ function automaticDraw(table) {
   const hand = table.hands[table.seats.indexOf(table.current)];
   if (!Array.isArray(hand)) return null;
   const choices = choicesFor(table, table.current, hand);
-  // A challenge and a playable drawn card are still the player's decisions.
-  if (!choices.draw || choices.challenge || choices.playable.length) return null;
+  // A playable drawn card is still the player's decision.
+  if (!choices.draw || choices.playable.length) return null;
   return { id: table.current, seq: table.turnSeq };
 }
 

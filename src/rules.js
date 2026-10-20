@@ -6,6 +6,7 @@ export const MIN_PLAYERS = 2;
 export const MAX_PLAYERS = 6;
 export const LOG_LIMIT = 12;
 export const VISIBLE_DISCARD = 6;
+export const NEXT_ROUND_DELAY_MS = 3000;
 const PHASES = Object.freeze(['lobby', 'playing', 'roundOver']);
 
 /**
@@ -26,7 +27,7 @@ export const SETTING_OPTIONS = Object.freeze({
   sevenZero: Object.freeze([true, false]),
   drawToMatch: Object.freeze([true, false]),
   forcePlay: Object.freeze([true, false]),
-  wildFour: Object.freeze(['challenge', 'anytime', 'strict']),
+  wildFour: Object.freeze(['anytime', 'strict']),
   mustCall: Object.freeze([true, false]),
   handSize: Object.freeze([5, 7, 10]),
   targetScore: Object.freeze([0, 200, 500]),
@@ -40,7 +41,7 @@ export const DEFAULT_SETTINGS = Object.freeze({
   sevenZero: false,
   drawToMatch: false,
   forcePlay: false,
-  wildFour: 'challenge',
+  wildFour: 'anytime',
   mustCall: true,
   handSize: 7,
   targetScore: 0,
@@ -62,6 +63,16 @@ export function normalizeSettings(input, base = DEFAULT_SETTINGS) {
     settings[key] = options.includes(wanted) ? wanted : DEFAULT_SETTINGS[key];
   }
   return settings;
+}
+
+/** Upgrade retired rules in saved or received snapshots before validation. */
+export function migrateSnapshot(snapshot) {
+  if (!isRecord(snapshot)) return snapshot;
+  let next = Object.hasOwn(snapshot, 'nextRoundAt') ? snapshot : { ...snapshot, nextRoundAt: null };
+  if (isRecord(next.settings) && next.settings.wildFour === 'challenge') {
+    next = { ...next, settings: { ...next.settings, wildFour: 'anytime' }, wd4: null };
+  }
+  return next;
 }
 
 const validSettings = (settings) => isRecord(settings)
@@ -94,6 +105,7 @@ export function createTable({ settings } = {}) {
     winner: null,
     matchWinner: null,
     roundPoints: 0,
+    nextRoundAt: null,
     reveal: [],
     log: [],
     logSeq: 0,
@@ -136,11 +148,9 @@ export function playCheck(table, playerId, hand, card) {
   return { jumpIn: true };
 }
 
-export function canChallenge(table, playerId) {
-  const top = topCard(table);
-  return table.phase === 'playing' && table.current === playerId && table.stage === 'play'
-    && table.pendingDraw > 0 && table.settings.wildFour === 'challenge'
-    && table.wd4 !== null && top !== null && rankOf(top) === 'wd4';
+export function canChallenge() {
+  // Kept for old callers and snapshots; bluff challenges are no longer a rule.
+  return false;
 }
 
 export function canCall(table, playerId, hand) {
@@ -311,6 +321,7 @@ function startRound(s, random) {
   s.lastPlay = null;
   s.winner = null;
   s.roundPoints = 0;
+  s.nextRoundAt = null;
   s.reveal = [];
   s.phase = 'playing';
   s.turnSeq += 1;
@@ -318,7 +329,7 @@ function startRound(s, random) {
   addLog(s, { k: 'deal', round: s.round, by: s.current });
 }
 
-function finishRound(s, winnerId) {
+function finishRound(s, winnerId, now) {
   let total = 0;
   s.reveal = s.seats.map((id, index) => {
     const value = s.hands[index].reduce((sum, card) => sum + points(card), 0);
@@ -330,19 +341,25 @@ function finishRound(s, winnerId) {
   s.winner = winnerId;
   if (s.settings.targetScore > 0 && s.scores[winnerId] >= s.settings.targetScore) s.matchWinner = winnerId;
   s.phase = 'roundOver';
+  s.nextRoundAt = now() + NEXT_ROUND_DELAY_MS;
   clearRound(s);
   addLog(s, { k: 'win', by: winnerId, points: total });
 }
 
 function abandon(s) {
   s.phase = 'lobby';
+  s.discard = [];
+  s.color = null;
+  s.direction = 1;
+  s.lastPlay = null;
   s.winner = null;
+  s.roundPoints = 0;
   s.reveal = [];
   clearRound(s);
   addLog(s, { k: 'abandon' });
 }
 
-function doPlay(s, playerId, action, random) {
+function doPlay(s, playerId, action, random, now) {
   if (s.phase !== 'playing') return false;
   const index = s.seats.indexOf(playerId);
   if (index < 0) return false;
@@ -358,19 +375,20 @@ function doPlay(s, playerId, action, random) {
   if (swapping && (!s.seats.includes(target) || target === playerId)) return false;
 
   closeCatchWindow(s, playerId);
-  // Stacking onto a pending draw is never a bluff: no colour card was allowed then.
-  const bluff = rank === 'wd4' && s.pendingDraw === 0 && hand.some((other) => other !== card && colorOf(other) === s.color);
   hand.splice(hand.indexOf(card), 1);
   s.discard.push(card);
   s.color = wild ? color : colorOf(card);
   s.drawnCard = null;
   s.lastPlay = { by: playerId, card, ...(wild ? { color } : {}), ...(check.jumpIn ? { jumpIn: true } : {}), ...(swapping ? { target } : {}) };
   addLog(s, { k: 'play', by: playerId, card, ...(wild ? { color } : {}), ...(check.jumpIn ? { jump: true } : {}) });
-  if (rank !== 'wd4') s.wd4 = null;
+  s.wd4 = null;
 
   if (hand.length === 1) {
     if (!s.called.includes(playerId)) {
-      if (s.settings.mustCall) s.exposed = playerId;
+      if (action.call === true) {
+        s.called.push(playerId);
+        addLog(s, { k: 'call', by: playerId });
+      } else if (s.settings.mustCall) s.exposed = playerId;
       else s.called.push(playerId);
     }
   } else {
@@ -386,7 +404,7 @@ function doPlay(s, playerId, action, random) {
       addLog(s, { k: 'take', by: s.seats[victimIndex], n: got.length });
     }
     s.pendingDraw = 0;
-    finishRound(s, playerId);
+    finishRound(s, playerId, now);
     return true;
   }
 
@@ -397,8 +415,7 @@ function doPlay(s, playerId, action, random) {
   if (rank === 's') return pass(s, index, 2);
   if (amount) {
     s.pendingDraw += amount;
-    if (rank === 'wd4') s.wd4 = { by: playerId, bluff };
-    const canRespond = s.settings.stacking !== 'off' || (rank === 'wd4' && s.settings.wildFour === 'challenge');
+    const canRespond = s.settings.stacking !== 'off';
     if (canRespond) return pass(s, index, 1);
     const victimIndex = step(s, index, 1);
     const got = drawCards(s, victimIndex, s.pendingDraw, random);
@@ -461,28 +478,6 @@ function doKeep(s, playerId) {
   return pass(s, s.seats.indexOf(playerId), 1);
 }
 
-function doChallenge(s, playerId, random) {
-  if (!canChallenge(s, playerId)) return false;
-  const index = s.seats.indexOf(playerId);
-  const amount = s.pendingDraw;
-  const { by, bluff } = s.wd4;
-  s.pendingDraw = 0;
-  s.wd4 = null;
-  closeCatchWindow(s, playerId);
-  if (bluff) {
-    // Caught bluffing: the cards go back to the player who bluffed, and the
-    // challenger plays on as normal.
-    const offender = s.seats.indexOf(by);
-    const got = offender >= 0 ? drawCards(s, offender, amount, random).length : 0;
-    addLog(s, { k: 'challenge', by: playerId, target: by, won: true, n: got });
-    s.turnSeq += 1;
-    return true;
-  }
-  const got = drawCards(s, index, amount + 2, random);
-  addLog(s, { k: 'challenge', by: playerId, target: by, won: false, n: got.length });
-  return pass(s, index, 1);
-}
-
 function doCall(s, playerId) {
   const index = s.seats.indexOf(playerId);
   if (index < 0 || !canCall(s, playerId, s.hands[index])) return false;
@@ -501,8 +496,9 @@ function doCatch(s, playerId, random) {
   return true;
 }
 
-function doDeal(s, playerId, hostId, memberIds, random) {
+function doDeal(s, playerId, hostId, memberIds, random, now) {
   if (s.phase === 'playing') return false;
+  if (s.nextRoundAt !== null && now() < s.nextRoundAt) return false;
   if (playerId !== hostId && !(s.phase === 'roundOver' && s.seats.includes(playerId))) return false;
   seatMembers(s, memberIds);
   if (s.seats.length < MIN_PLAYERS) return false;
@@ -566,20 +562,19 @@ function replaceDeparted(s, memberIds, random) {
  * Apply a participant's action. Turn actions carry the turnSeq they were
  * chosen against, so a click made before someone jumped in is rejected.
  */
-export function applyAction(state, playerId, action, { hostId = null, memberIds = null, random = Math.random } = {}) {
+export function applyAction(state, playerId, action, { hostId = null, memberIds = null, random = Math.random, now = Date.now } = {}) {
   if (!isRecord(action) || !isPlayerId(playerId)) return null;
-  const s = clone(state);
+  const s = clone(migrateSnapshot(state));
   const members = Array.isArray(memberIds) ? memberIds : s.seats.filter(isId);
   const onTurn = () => s.phase === 'playing' && s.current === playerId && action.seq === s.turnSeq;
   let ok = false;
   switch (action.type) {
-    case 'play': ok = doPlay(s, playerId, action, random); break;
+    case 'play': ok = doPlay(s, playerId, action, random, now); break;
     case 'draw': ok = onTurn() && doDraw(s, playerId, random); break;
     case 'keep': ok = onTurn() && doKeep(s, playerId); break;
-    case 'challenge': ok = onTurn() && doChallenge(s, playerId, random); break;
     case 'call': ok = doCall(s, playerId); break;
     case 'catch': ok = doCatch(s, playerId, random); break;
-    case 'deal': ok = members.includes(playerId) && doDeal(s, playerId, hostId, members, random); break;
+    case 'deal': ok = members.includes(playerId) && doDeal(s, playerId, hostId, members, random, now); break;
     case 'seat': ok = members.includes(playerId) && doSeat(s, playerId, action.watch, members); break;
     case 'settings': {
       if (playerId !== hostId || s.phase === 'playing' || !isRecord(action.settings)) break;
@@ -591,11 +586,9 @@ export function applyAction(state, playerId, action, { hostId = null, memberIds 
       break;
     }
     case 'lobby':
-      ok = playerId === hostId && s.phase === 'roundOver';
+      ok = playerId === hostId && members.includes(playerId) && s.phase !== 'lobby';
       if (ok) {
-        s.phase = 'lobby';
-        s.winner = null;
-        s.reveal = [];
+        abandon(s);
         seatMembers(s, members);
       }
       break;
@@ -607,9 +600,9 @@ export function applyAction(state, playerId, action, { hostId = null, memberIds 
 }
 
 /** The turn timer ran out: draw (or take the stack), then keep or force the play. */
-export function expireTurn(state, random = Math.random) {
+export function expireTurn(state, random = Math.random, now = Date.now) {
   if (state.phase !== 'playing' || state.current === null) return null;
-  const s = clone(state);
+  const s = clone(migrateSnapshot(state));
   const id = s.current;
   const turn = s.turnNo;
   addLog(s, { k: 'timeout', by: id });
@@ -622,7 +615,7 @@ export function expireTurn(state, random = Math.random) {
       seq: s.turnSeq,
       color: isWild(card) ? bestColor(rest, random) : undefined,
       target: smallestHand(s, id),
-    }, random);
+    }, random, now);
   }
   // Whatever happened above, an expired turn always moves on.
   if (s.phase === 'playing' && s.turnNo === turn) {
@@ -635,7 +628,7 @@ export function expireTurn(state, random = Math.random) {
 
 /** Keep seats in step with who is in the activity. */
 export function applyRoster(state, memberIds, random = Math.random) {
-  const s = clone(state);
+  const s = clone(migrateSnapshot(state));
   if (s.phase === 'playing') replaceDeparted(s, memberIds, random);
   if (s.phase !== 'playing') seatMembers(s, memberIds);
   if (JSON.stringify(s) === JSON.stringify(state)) return state;
@@ -646,7 +639,7 @@ export function applyRoster(state, memberIds, random = Math.random) {
 /** End the current round without a winner and return to the lobby. */
 export function abandonRound(state) {
   if (state.phase !== 'playing') return state;
-  const s = clone(state);
+  const s = clone(migrateSnapshot(state));
   abandon(s);
   s.revision = state.revision + 1;
   return s;
@@ -660,7 +653,7 @@ export function viewFor(table, viewerId) {
     phase: table.phase,
     round: table.round,
     revision: table.revision,
-    settings: { ...table.settings },
+    settings: normalizeSettings(table.settings),
     seats: [...table.seats],
     sittingOut: [...table.sittingOut],
     scores: { ...table.scores },
@@ -675,13 +668,14 @@ export function viewFor(table, viewerId) {
     turnSeq: table.turnSeq,
     turnNo: table.turnNo,
     pendingDraw: table.pendingDraw,
-    wd4: table.wd4 && { by: table.wd4.by },
+    wd4: null,
     called: [...table.called],
     exposed: table.exposed,
     lastPlay: table.lastPlay && { ...table.lastPlay },
     winner: table.winner,
     matchWinner: table.matchWinner,
     roundPoints: table.roundPoints,
+    nextRoundAt: table.nextRoundAt ?? null,
     reveal: clone(table.reveal),
     log: clone(table.log),
     hand: playing && seat >= 0 ? [...table.hands[seat]] : null,
@@ -710,7 +704,6 @@ export function rebuildTable(view, reports = new Map(), random = Math.random) {
     turnSeq: view.turnSeq + 1,
     turnNo: view.turnNo + 1,
     pendingDraw: view.pendingDraw,
-    // Whether the last +4 was a bluff left with the old host, so it cannot be challenged.
     wd4: null,
     called: [...view.called],
     exposed: view.exposed,
@@ -718,6 +711,7 @@ export function rebuildTable(view, reports = new Map(), random = Math.random) {
     winner: view.winner,
     matchWinner: view.matchWinner,
     roundPoints: view.roundPoints,
+    nextRoundAt: view.nextRoundAt ?? null,
     reveal: clone(view.reveal),
     log: clone(view.log),
     logSeq: Math.max(0, ...view.log.map((entry) => entry.seq ?? entry.n).filter(isCount)),
@@ -771,6 +765,7 @@ const optionalPlayer = (value) => value === null || isPlayerId(value);
 function validCommon(t) {
   return isRecord(t) && PHASES.includes(t.phase)
     && ['round', 'revision', 'turnSeq', 'turnNo', 'pendingDraw', 'roundPoints'].every((key) => isCount(t[key]))
+    && (t.nextRoundAt === undefined || t.nextRoundAt === null || (Number.isFinite(t.nextRoundAt) && t.nextRoundAt >= 0))
     && validSettings(t.settings)
     // Seats hold people, or only the computer players the host added.
     && isIdList(t.seats, MAX_PLAYERS, isPlayerId) && t.seats.every((id) => isId(id) || botIds(t.settings).includes(id))

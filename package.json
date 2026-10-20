@@ -2,7 +2,7 @@
   "name": "uni-refract",
   "version": "1.0.0",
   "private": true,
-  "description": "No-no, the hand-drawn card game, as a two-to-six player Refract activity: stacking, jump-ins, 7-0, challenges, turn timers, and shouting “Oh no!”.",
+  "description": "No-no, the hand-drawn card game, as a two-to-six player Refract activity: stacking, jump-ins, 7-0, turn timers, and shouting “Oh no!”.",
   "type": "module",
   "license": "GPL-3.0-only",
   "engines": {

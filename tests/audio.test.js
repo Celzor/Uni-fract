@@ -73,6 +73,77 @@ test('real consecutive single-card draws each sound once, including a draw that 
   assert.deepEqual(h.played, ['turn.wav', 'draw.wav', 'draw.wav']);
 });
 
+test('a real Oh no call speaks once for the caller and the other players', () => {
+  const clients = [audio(), audio(), audio()];
+  let table = playing({ hands: [['r5', 'b2'], ['g1', 'g2'], ['b1', 'b3']] });
+  const show = () => clients.forEach((client, index) => client.controller.update(viewFor(table, index + 1), index + 1));
+  show();
+  table = applyAction(table, 1, { type: 'call' });
+  show();
+  show();
+  table = applyAction(table, 1, { type: 'play', seq: table.turnSeq, card: table.hands[0][0] });
+  show();
+  for (const client of clients) {
+    assert.equal(client.played.filter((cue) => cue === 'oh-no.wav').length, 1);
+    assert.equal(client.played.at(-1), 'oh-no.wav', 'playing the card and the next turn do not cut off speech');
+    const voice = client.media.find((sound) => sound.src.endsWith('/oh-no.wav'));
+    assert.equal(voice.volume, 0.6);
+    assert.equal(voice.playbackRate, 1);
+    assert.equal(voice.preservesPitch, true);
+  }
+});
+
+test('Oh no attached to a draw-four play takes priority over its impact and the next turn', () => {
+  const clients = [audio(), audio(), audio()];
+  let table = playing({ hands: [['wd4', 'b2'], ['g1', 'g2'], ['b1', 'b3']] });
+  const show = () => clients.forEach((client, index) => client.controller.update(viewFor(table, index + 1), index + 1));
+  show();
+  table = applyAction(table, 1, {
+    type: 'play', seq: table.turnSeq, card: table.hands[0][0], color: 'b', call: true,
+  });
+  assert.equal(table.pendingDraw, 4);
+  show();
+  show();
+  for (const client of clients) {
+    assert.equal(client.played.filter((cue) => cue === 'oh-no.wav').length, 1);
+    assert.equal(client.played.at(-1), 'oh-no.wav');
+    assert.equal(client.played.includes('impact.wav'), false);
+  }
+});
+
+test('spoken calls interrupt card impacts and never replay after mute, hiding or reconnect', () => {
+  const h = audio();
+  const { take } = cardPicker();
+  let view = snapshot();
+  const append = (entry) => {
+    view = { ...view, revision: view.revision + 1,
+      log: [...view.log, { ...entry, seq: view.log.length + 1 }] };
+    h.controller.update(view, 1);
+  };
+  h.controller.update(view, 1);
+  append({ k: 'play', card: take('wd4') });
+  append({ k: 'call', by: 2 });
+  assert.deepEqual(h.played, ['impact.wav', 'oh-no.wav']);
+  assert.equal(h.media[0].paused, true);
+  const voice = h.media[1];
+  voice.currentTime = 0.4;
+  h.controller.setEnabled(false);
+  assert.equal(voice.paused, true);
+  assert.equal(voice.currentTime, 0);
+  append({ k: 'call', by: 3 });
+  h.controller.setEnabled(true);
+  h.controller.update(view, 1);
+  h.hide(true);
+  append({ k: 'call', by: 2 });
+  h.hide(false);
+  h.controller.update(view, 1);
+  h.controller.update(null, 1);
+  h.controller.update(structuredClone(view), 1);
+  assert.deepEqual(h.played, ['impact.wav', 'oh-no.wav']);
+  append({ k: 'call', by: 3 });
+  assert.deepEqual(h.played, ['impact.wav', 'oh-no.wav', 'oh-no.wav']);
+});
+
 test('turn and win cues take priority over card effects without layering', () => {
   const h = audio();
   h.controller.update(snapshot(), 1);
@@ -228,7 +299,7 @@ test('muting stops playback and consumes events without replay on unmute', () =>
   h.controller.update(next, 1);
   assert.deepEqual(h.played, ['turn.wav']);
   h.controller.update({ ...next, revision: 3, log: [...next.log, { seq: 2, n: 2, k: 'call' }] }, 1);
-  assert.deepEqual(h.played, ['turn.wav', 'call.wav']);
+  assert.deepEqual(h.played, ['turn.wav', 'oh-no.wav']);
 });
 
 test('hidden updates, temporary null views and repeated syncs do not replay cues', () => {
@@ -243,11 +314,11 @@ test('hidden updates, temporary null views and repeated syncs do not replay cues
   h.controller.update(structuredClone(hidden), 1);
   assert.deepEqual(h.played, []);
   h.controller.update({ ...hidden, revision: 3, log: [...hidden.log, { seq: 2, n: 2, k: 'call' }] }, 1);
-  assert.deepEqual(h.played, ['call.wav']);
+  assert.deepEqual(h.played, ['oh-no.wav']);
   h.controller.destroy();
   assert.equal(h.media[0].paused, true);
   h.controller.update({ ...hidden, revision: 4, turnNo: 3 }, 1);
-  assert.deepEqual(h.played, ['call.wav']);
+  assert.deepEqual(h.played, ['oh-no.wav']);
 });
 
 test('an accepted lower-revision sync baselines history and resumes sound for new events', () => {
@@ -258,7 +329,7 @@ test('an accepted lower-revision sync baselines history and resumes sound for ne
   h.controller.update(restored, 1);
   assert.deepEqual(h.played, ['turn.wav'], 'restored history and current turn are not replayed');
   h.controller.update({ ...restored, revision: 5, log: [...restored.log, { seq: 5, k: 'call' }] }, 1);
-  assert.deepEqual(h.played, ['turn.wav', 'call.wav']);
+  assert.deepEqual(h.played, ['turn.wav', 'oh-no.wav']);
 });
 
 test('reset starts a new session baseline even when revisions and event IDs are reused', () => {
@@ -272,11 +343,11 @@ test('reset starts a new session baseline even when revisions and event IDs are 
   h.controller.update(nextSession, 1);
   assert.deepEqual(h.played, ['turn.wav'], 'new-session history is silent');
   h.controller.update({ ...nextSession, revision: 5, log: [...nextSession.log, { seq: 11, k: 'call' }] }, 1);
-  assert.deepEqual(h.played, ['turn.wav', 'call.wav']);
+  assert.deepEqual(h.played, ['turn.wav', 'oh-no.wav']);
   h.controller.setEnabled(false);
   h.controller.reset();
   h.controller.update(previous, 1);
-  assert.deepEqual(h.played, ['turn.wav', 'call.wav'], 'reset preserves the mute preference');
+  assert.deepEqual(h.played, ['turn.wav', 'oh-no.wav'], 'reset preserves the mute preference');
 });
 
 test('deals and calls have cues; empty draws and automatic timeout/keep actions are quiet', () => {
