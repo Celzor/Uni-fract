@@ -126,7 +126,7 @@ This is a cooperative casual-game protocol, not an anti-cheat service: the hostâ
 
 Card art lives in [`assets/cards`](assets/cards), named by face: colour `r`/`y`/`g`/`b` followed by `0`â€“`9`, `s` (skip), `r` (reverse) or `d2`, plus `w` and `wd4`.
 
-All 54 faces use matching editable SVGs with handwritten strokes and four-colour wild symbols. Yellow and blue have broad sunny-yellow and saturated-blue fields with dark, readable symbols, so their colours stand out even in small hands. The source drawing commands are in [`tools/redraw-cards.js`](tools/redraw-cards.js); run `node tools/redraw-cards.js` to regenerate the deck. The older `node tools/redraw-yellow.js` command still regenerates only the yellow faces.
+All 54 faces use matching editable SVGs with handwritten strokes and four-colour wild symbols. The original cream paper, borders and drawings are preserved, with stronger yellow and blue ink to make those colours more distinct. The source drawing commands are in [`tools/redraw-cards.js`](tools/redraw-cards.js); run `node tools/redraw-cards.js` to regenerate the deck. The older `node tools/redraw-yellow.js` command still regenerates only the yellow faces.
 
 ## Development checks
 
