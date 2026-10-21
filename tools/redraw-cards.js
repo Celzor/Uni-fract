@@ -1,14 +1,14 @@
 // Editable vector originals for every face in the homemade pen-and-paper deck.
-// Shared handwritten strokes, with bright colour fields for yellow and blue.
+// Original handwritten artwork, with stronger yellow and blue ink.
 import { writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const inks = {
   r: { name: 'Red', primary: '#b13e35', highlight: '#c87564' },
-  y: { name: 'Yellow', primary: '#675000', highlight: '#ffe774', accent: '#ffd21c', paper: '#fff3b0', field: '#ffdf47', center: '#fff9dc' },
+  y: { name: 'Yellow', primary: '#d3aa00', highlight: '#ebc83b' },
   g: { name: 'Green', primary: '#2c7a4d', highlight: '#6c9e71' },
-  b: { name: 'Blue', primary: '#123d86', highlight: '#7cb8ff', accent: '#1673ed', paper: '#d7ebff', field: '#a9d3ff', center: '#eff7ff' },
+  b: { name: 'Blue', primary: '#1669df', highlight: '#699ff0' },
 };
 const numerals = {
   0: 'M207 169C120 158 111 246 115 305C119 396 146 438 202 435C267 432 288 356 284 288C279 205 258 169 207 169Z',
@@ -29,16 +29,15 @@ const actions = {
 };
 
 function coloredFace(color, rank) {
-  const { name, primary, highlight, accent = primary, paper = '#fffef9', field = 'none', center } = inks[color];
+  const { name, primary, highlight } = inks[color];
   const prefix = color.toUpperCase();
   const label = { s: 'SKIP', r: 'REVERSE', d2: 'PICK UP TWO' }[rank];
   const symbol = rank === 'd2' ? '+2' : rank === 's' ? 'S' : rank === 'r' ? 'R' : rank;
   const drawing = numerals[rank] ? `<path d="${numerals[rank]}"/>` : actions[rank];
-  const panel = center ? `  <path d="M87 129C155 120 246 127 318 139C325 249 324 362 315 492C235 501 153 491 79 497C70 363 75 244 87 129Z" fill="${center}"/>\n` : '';
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 600" role="img" aria-label="${name} ${label ?? rank}">
-  <rect width="400" height="600" rx="13" fill="${paper}"/>
-  <path d="M31 24C130 34 255 24 369 34C360 204 353 375 370 566C261 561 142 581 29 565C43 406 25 224 34 55Z" fill="${field}" stroke="${accent}" stroke-width="${center ? 14 : 7}" stroke-linejoin="round" stroke-linecap="round"/>
-${panel}  <path d="M36 28C142 40 258 30 364 38M35 562C153 574 267 557 366 561" fill="none" stroke="${highlight}" stroke-width="2" opacity=".65"/>
+  <rect width="400" height="600" rx="13" fill="#fffef9"/>
+  <path d="M31 24C130 34 255 24 369 34C360 204 353 375 370 566C261 561 142 581 29 565C43 406 25 224 34 55Z" fill="none" stroke="${primary}" stroke-width="7" stroke-linejoin="round" stroke-linecap="round"/>
+  <path d="M36 28C142 40 258 30 364 38M35 562C153 574 267 557 366 561" fill="none" stroke="${highlight}" stroke-width="2" opacity=".65"/>
   <g fill="${primary}" font-family="Segoe Print, Comic Sans MS, cursive" font-weight="700">
     <text x="48" y="81" font-size="31" transform="rotate(-4 48 81)">No No</text>
     <text x="352" y="87" font-size="45" text-anchor="end" transform="rotate(4 352 87)">${prefix}${symbol}</text>
@@ -69,10 +68,10 @@ function wildFace(drawFour) {
     <text x="200" y="470" font-size="${drawFour ? 26 : 34}" text-anchor="middle" transform="rotate(-3 200 470)">${label}</text>
   </g>
   <g stroke-width="6" stroke-linecap="round" stroke-linejoin="round" transform="rotate(-3 200 300)">
-    <path d="M193 162C126 155 77 211 80 285L193 285Z" fill="${inks.r.primary}" fill-opacity=".7" stroke="${inks.r.primary}"/>
-    <path d="M207 162C279 165 322 215 320 285L207 285Z" fill="${inks.y.accent}" fill-opacity=".9" stroke="${inks.y.accent}"/>
-    <path d="M320 299C325 370 270 420 207 418L207 299Z" fill="${inks.g.primary}" fill-opacity=".7" stroke="${inks.g.primary}"/>
-    <path d="M193 418C124 425 77 370 80 299L193 299Z" fill="${inks.b.accent}" fill-opacity=".85" stroke="${inks.b.accent}"/>
+    <path d="M193 162C126 155 77 211 80 285L193 285Z" fill="${inks.r.primary}" fill-opacity=".17" stroke="${inks.r.primary}"/>
+    <path d="M207 162C279 165 322 215 320 285L207 285Z" fill="${inks.y.primary}" fill-opacity=".17" stroke="${inks.y.primary}"/>
+    <path d="M320 299C325 370 270 420 207 418L207 299Z" fill="${inks.g.primary}" fill-opacity=".17" stroke="${inks.g.primary}"/>
+    <path d="M193 418C124 425 77 370 80 299L193 299Z" fill="${inks.b.primary}" fill-opacity=".17" stroke="${inks.b.primary}"/>
     <path d="${drawing}" fill="none" stroke="#fffef9" stroke-width="23"/>
     <path d="${drawing}" fill="none" stroke="#69533d" stroke-width="11"/>
   </g>

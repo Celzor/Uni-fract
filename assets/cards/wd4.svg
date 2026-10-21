@@ -10,10 +10,10 @@
     <text x="200" y="470" font-size="26" text-anchor="middle" transform="rotate(-3 200 470)">WILD DRAW FOUR</text>
   </g>
   <g stroke-width="6" stroke-linecap="round" stroke-linejoin="round" transform="rotate(-3 200 300)">
-    <path d="M193 162C126 155 77 211 80 285L193 285Z" fill="#b13e35" fill-opacity=".7" stroke="#b13e35"/>
-    <path d="M207 162C279 165 322 215 320 285L207 285Z" fill="#ffd21c" fill-opacity=".9" stroke="#ffd21c"/>
-    <path d="M320 299C325 370 270 420 207 418L207 299Z" fill="#2c7a4d" fill-opacity=".7" stroke="#2c7a4d"/>
-    <path d="M193 418C124 425 77 370 80 299L193 299Z" fill="#1673ed" fill-opacity=".85" stroke="#1673ed"/>
+    <path d="M193 162C126 155 77 211 80 285L193 285Z" fill="#b13e35" fill-opacity=".17" stroke="#b13e35"/>
+    <path d="M207 162C279 165 322 215 320 285L207 285Z" fill="#d3aa00" fill-opacity=".17" stroke="#d3aa00"/>
+    <path d="M320 299C325 370 270 420 207 418L207 299Z" fill="#2c7a4d" fill-opacity=".17" stroke="#2c7a4d"/>
+    <path d="M193 418C124 425 77 370 80 299L193 299Z" fill="#1669df" fill-opacity=".17" stroke="#1669df"/>
     <path d="M76 299L151 296M115 258L111 338 M263 390L266 203L171 335L306 331" fill="none" stroke="#fffef9" stroke-width="23"/>
     <path d="M76 299L151 296M115 258L111 338 M263 390L266 203L171 335L306 331" fill="none" stroke="#69533d" stroke-width="11"/>
   </g>

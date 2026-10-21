@@ -7,6 +7,7 @@ export const MAX_PLAYERS = 6;
 export const LOG_LIMIT = 12;
 export const VISIBLE_DISCARD = 6;
 export const NEXT_ROUND_DELAY_MS = 3000;
+export const TURN_TIMER_LIMITS = Object.freeze({ min: 0, max: 600, step: 1 });
 const PHASES = Object.freeze(['lobby', 'playing', 'roundOver']);
 
 /**
@@ -21,7 +22,7 @@ export const botName = (id) => BOT_NAMES[-id - 1];
 
 export const SETTING_OPTIONS = Object.freeze({
   bots: Object.freeze([0, 1, 2, 3, 4, 5]),
-  turnTimer: Object.freeze([0, 10, 15, 20, 30, 45, 60]),
+  turnTimer: TURN_TIMER_LIMITS,
   stacking: Object.freeze(['off', 'same', 'progressive']),
   jumpIn: Object.freeze([true, false]),
   sevenZero: Object.freeze([true, false]),
@@ -56,11 +57,18 @@ const isIdList = (value, max = Infinity, valid = isId) => Array.isArray(value) &
   && value.every(valid) && new Set(value).size === value.length;
 const isCardList = (value) => Array.isArray(value) && value.every(isCard) && new Set(value).size === value.length;
 
+function validSetting(key, value) {
+  const options = SETTING_OPTIONS[key];
+  return Array.isArray(options) ? options.includes(value)
+    : Number.isInteger(value) && value >= options.min && value <= options.max
+      && (value - options.min) % options.step === 0;
+}
+
 export function normalizeSettings(input, base = DEFAULT_SETTINGS) {
   const settings = {};
-  for (const [key, options] of Object.entries(SETTING_OPTIONS)) {
+  for (const key of Object.keys(SETTING_OPTIONS)) {
     const wanted = isRecord(input) && Object.hasOwn(input, key) ? input[key] : base?.[key];
-    settings[key] = options.includes(wanted) ? wanted : DEFAULT_SETTINGS[key];
+    settings[key] = validSetting(key, wanted) ? wanted : DEFAULT_SETTINGS[key];
   }
   return settings;
 }
@@ -76,7 +84,7 @@ export function migrateSnapshot(snapshot) {
 }
 
 const validSettings = (settings) => isRecord(settings)
-  && Object.entries(SETTING_OPTIONS).every(([key, options]) => options.includes(settings[key]));
+  && Object.keys(SETTING_OPTIONS).every((key) => validSetting(key, settings[key]));
 
 export function createTable({ settings } = {}) {
   return {

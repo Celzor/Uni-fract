@@ -132,3 +132,33 @@ test('the host lobby action cancels practice bots and the turn clock while retai
   assert.equal(h.state.view.phase, 'playing');
   h.game.destroy();
 });
+
+test('practice supports custom turn durations and retains them when returning to the lobby', () => {
+  for (const turnTimer of [0, 1, 3, 7, 90, 600]) {
+    const h = practice({ bots: 1 });
+    h.game.act({ type: 'settings', settings: { turnTimer, jumpIn: false } });
+    h.game.act({ type: 'deal' });
+    assert.equal(h.state.view.settings.turnTimer, turnTimer);
+    assert.equal(h.state.timerEndsAt, turnTimer === 0 ? null : h.timers.now() + turnTimer * 1000);
+    h.game.act({ type: 'settings', settings: { turnTimer: 30 } });
+    assert.equal(h.state.view.settings.turnTimer, turnTimer, 'the timer remains fixed during a round');
+    h.game.act({ type: 'lobby' });
+    assert.equal(h.state.view.settings.turnTimer, turnTimer);
+    assert.equal(h.state.timerEndsAt, null);
+    h.game.destroy();
+  }
+});
+
+test('a one-second practice turn expires at one second and passes control', () => {
+  const h = practice({ bots: 1 });
+  h.game.act({ type: 'settings', settings: { turnTimer: 1, jumpIn: false } });
+  h.game.act({ type: 'deal' });
+  const before = h.state.view;
+  h.timers.advance(999);
+  assert.equal(h.state.view.revision, before.revision);
+  h.timers.advance(1);
+  assert.ok(h.state.view.log.some(({ k, by }) => k === 'timeout' && by === HUMAN_ID));
+  assert.notEqual(h.state.view.current, HUMAN_ID);
+  assert.equal(h.state.nextRoundAt, null);
+  h.game.destroy();
+});
