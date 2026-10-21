@@ -37,11 +37,29 @@ test('the deck has 108 cards with classic counts and scoring', () => {
 
 test('settings are normalized to known options', () => {
   assert.deepEqual(normalizeSettings({ turnTimer: 11, stacking: 'progressive', jumpIn: 'yes', extra: true }), {
-    ...DEFAULT_SETTINGS, stacking: 'progressive',
+    ...DEFAULT_SETTINGS, turnTimer: 11, stacking: 'progressive',
   });
   assert.deepEqual(normalizeSettings(null), DEFAULT_SETTINGS);
   assert.equal(normalizeSettings({ wildFour: 'challenge' }).wildFour, 'anytime');
   assert.equal(normalizeSettings({}, { ...DEFAULT_SETTINGS, wildFour: 'challenge' }).wildFour, 'anytime');
+});
+
+test('custom turn timers accept whole seconds across the range and reject invalid settings', () => {
+  for (const turnTimer of [0, 1, 3, 7, 11, 90, 600]) {
+    const table = createTable({ settings: { turnTimer } });
+    assert.equal(table.settings.turnTimer, turnTimer);
+    assert.equal(normalizeSettings({ stacking: 'off' }, table.settings).turnTimer, turnTimer,
+      'changing another rule preserves a custom timer');
+    assert.ok(isValidTable(table));
+    assert.ok(isValidView(viewFor(table, 1), [1], 1));
+  }
+  const table = createTable();
+  const view = viewFor(table, 1);
+  for (const turnTimer of [-1, 601, 0.5, 7.1, Infinity, NaN, '7', null, true]) {
+    assert.equal(normalizeSettings({ turnTimer }).turnTimer, DEFAULT_SETTINGS.turnTimer);
+    assert.equal(isValidTable({ ...table, settings: { ...table.settings, turnTimer } }), false);
+    assert.equal(isValidView({ ...view, settings: { ...view.settings, turnTimer } }, [1], 1), false);
+  }
 });
 
 test('the lobby seats up to six in arrival order and the host deals a fair opening', () => {
@@ -545,7 +563,7 @@ test('computer players fill free seats, give them up to people, and play by the 
 test('validators reject malformed tables and views', () => {
   const table = playing({ hands: [['g1'], ['b2', 'b5'], ['y4']], discard: ['r3'] });
   for (const broken of [null, {}, { ...table, phase: 'nope' }, { ...table, drawPile: table.drawPile.slice(1) },
-    { ...table, current: 99 }, { ...table, settings: { ...table.settings, turnTimer: 7 } },
+    { ...table, current: 99 }, { ...table, settings: { ...table.settings, turnTimer: 601 } },
     { ...table, hands: [[...table.hands[0], table.drawPile[0]], table.hands[1], table.hands[2]] },
     { ...table, scores: { abc: 1 } }, { ...table, stage: 'drawn' }]) {
     assert.equal(isValidTable(broken), false);

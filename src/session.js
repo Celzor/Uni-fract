@@ -2,13 +2,13 @@ import { createBotDriver } from './bots.js';
 import { createAutoDrawDriver } from './auto-draw.js';
 import { createTurnClock } from './clock.js';
 import {
-  NEXT_ROUND_DELAY_MS, applyAction, applyRoster, createTable, expireTurn, isValidTable, isValidView, migrateSnapshot, rebuildTable, viewFor,
+  NEXT_ROUND_DELAY_MS, TURN_TIMER_LIMITS, applyAction, applyRoster, createTable, expireTurn, isValidTable, isValidView, migrateSnapshot, rebuildTable, viewFor,
 } from './rules.js';
 
 export const GAME_PROTOCOL = 'uni-refract/1';
 export const RECOVERY_WINDOW_MS = 2500;
 export const RECOVERY_RETRY_MS = 900;
-const MAX_TIMER_MS = 120000;
+const MAX_TIMER_MS = TURN_TIMER_LIMITS.max * 1000;
 
 const validId = (id) => Number.isSafeInteger(id) && id > 0;
 const clone = (value) => (value === undefined ? undefined : JSON.parse(JSON.stringify(value)));

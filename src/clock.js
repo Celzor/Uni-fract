@@ -34,7 +34,7 @@ export function createTurnClock({ now = () => Date.now(), timers = globalThis, o
       deadline = now() + seconds * 1000;
       graced = false;
     } else if (table.stage === 'drawn' && !graced) {
-      deadline = Math.max(deadline, now() + DRAWN_GRACE_MS);
+      deadline = Math.max(deadline, now() + Math.min(DRAWN_GRACE_MS, seconds * 1000));
       graced = true;
     }
     stop();

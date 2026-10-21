@@ -55,8 +55,8 @@
               <form id="settings" class="settings">
                 <label class="setting"><span><strong>Computer players</strong><small>Bots fill empty seats and give them up when people join.</small></span>
                   <select name="bots"><option value="0">None</option><option value="1">1 bot</option><option value="2">2 bots</option><option value="3">3 bots</option><option value="4">4 bots</option><option value="5">5 bots</option></select></label>
-                <label class="setting"><span><strong>Turn timer</strong><small>Run out of time and you draw automatically.</small></span>
-                  <select name="turnTimer"><option value="0">Off</option><option value="10">10 s</option><option value="15">15 s</option><option value="20">20 s</option><option value="30">30 s</option><option value="45">45 s</option><option value="60">60 s</option></select></label>
+                <label class="setting"><span><strong>Turn timer</strong><small id="turn-timer-hint">Enter 1–600 seconds. 0 turns the timer off.</small></span>
+                  <span class="timer-setting-control"><input id="turn-timer" type="number" name="turnTimer" min="0" max="600" step="1" value="30" required inputmode="numeric" aria-describedby="turn-timer-hint" title="Enter a whole number of seconds from 0 to 600"><span aria-hidden="true">sec</span></span></label>
                 <label class="setting"><span><strong>Draw stacking</strong><small>Answer a draw card with one of your own and pass the pain along.</small></span>
                   <select name="stacking"><option value="off">Off</option><option value="same">+2 on +2, +4 on +4</option><option value="progressive">Also +4 on +2</option></select></label>
                 <label class="setting"><span><strong>Jump-in</strong><small>Play an identical card out of turn, even on your own card.</small></span>

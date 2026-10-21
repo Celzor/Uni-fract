@@ -22,6 +22,17 @@ test('rule menus offer exactly the values the engine accepts', () => {
   }
 });
 
+test('custom time input matches the engine range and requires a value', () => {
+  const input = settingsForm.match(/<input[^>]*name="turnTimer"[^>]*>/)?.[0];
+  assert.ok(input, 'turn timer has an editable input');
+  const attributes = Object.fromEntries([...input.matchAll(/([\w-]+)="([^"]*)"/g)].map(([, key, value]) => [key, value]));
+  assert.equal(attributes.type, 'number');
+  assert.deepEqual({
+    min: Number(attributes.min), max: Number(attributes.max), step: Number(attributes.step),
+  }, SETTING_OPTIONS.turnTimer);
+  assert.match(input, /\srequired(?:\s|>)/);
+});
+
 test('every element the app looks up by id exists in the page', () => {
   const ids = new Set([...html.matchAll(/\sid="([^"]+)"/g)].map((match) => match[1]));
   const used = new Set([...app.matchAll(/\$\('([^']+)'\)/g)].map((match) => match[1]));

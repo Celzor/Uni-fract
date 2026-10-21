@@ -58,7 +58,7 @@ The host sets these in the lobby, or between rounds. **Back to lobby** lets the 
 | Rule | Options | What it does |
 | --- | --- | --- |
 | Computer players | None, 1–5 (practice starts with 3) | Bots fill empty seats and play by the same rules: they stack, jump in, shout “Oh no!” (usually), and will catch you if you forget. People always get priority: someone joining between rounds takes a bot’s seat. |
-| Turn timer | Off, 10–60 s (default 30 s) | When time runs out you draw automatically (or take the stacked draws), and your turn ends. A just-drawn card gets at least five seconds of decision time. |
+| Turn timer | Enter any whole number from 1–600 s; 0 = off (default 30 s) | Set short turns such as 3 or 7 seconds for speed rounds. When time runs out you draw automatically (or take the stacked draws), and your turn ends. A playable drawn card gets at least five seconds to decide, or the chosen turn duration if shorter. |
 | Draw stacking | Off · +2 on +2, +4 on +4 · also +4 on +2 | Answer a draw card with your own to pass the growing total to the next player. Whoever can’t (or won’t) takes the lot and loses their turn. |
 | Jump-in | On / off | Play a card identical to the top card (same colour and symbol) out of turn, including a second copy on your own card. Play continues from you. Identical +2s add to a pending draw stack; wilds never jump in. |
 | 7-0 | On / off | A 7 swaps your hand with a player you choose. A 0 passes every hand one seat along in the direction of play. |
@@ -146,9 +146,10 @@ npm install --no-save --package-lock=false playwright
 npx playwright install chromium
 node tools/browser-check.mjs
 node tools/countdown-check.mjs
+node tools/custom-timer-check.mjs
 ```
 
-Both checks accept `TEST_URL` (defaults to `http://127.0.0.1:4173/`), `PLAYWRIGHT_MODULE` for an existing Playwright installation, and `PLAYWRIGHT_CHROMIUM_EXECUTABLE` for an existing Chromium-based browser such as Edge or Chrome. The countdown check covers the three-second pause and early deal rejection. Screenshots go to the ignored `artifacts/` folder. A protocol simulator verifies the app’s side of the contract; final acceptance uses signed-in users in an actual Refract call.
+These checks accept `TEST_URL` (defaults to `http://127.0.0.1:4173/`), `PLAYWRIGHT_MODULE` for an existing Playwright installation, and `PLAYWRIGHT_CHROMIUM_EXECUTABLE` for an existing Chromium-based browser such as Edge or Chrome. The countdown check covers the three-second pause and early deal rejection; the custom timer check covers entered times, input validation, synchronization, and speed-round expiry. Screenshots go to the ignored `artifacts/` folder. A protocol simulator verifies the app’s side of the contract; final acceptance uses signed-in users in an actual Refract call.
 
 ## License
 

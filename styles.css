@@ -91,6 +91,9 @@ h1 span { color: var(--cyan); font-style: italic; font-weight: 400; }
 .setting strong { font-size: 12px; font-weight: 600; }
 .setting small { color: var(--muted); font-size: 10px; line-height: 1.45; }
 .setting select { flex: 0 0 auto; max-width: 145px; background: var(--sunken); border: 1px solid #bbaa85; border-radius: 4px; padding: 6px 7px; font-size: 11px; }
+.setting > .timer-setting-control { flex: 0 0 auto; flex-direction: row; align-items: center; gap: 6px; }
+.timer-setting-control input { width: 82px; min-width: 0; background: var(--sunken); color: var(--text); border: 1px solid #bbaa85; border-radius: 4px; padding: 5px 7px; font-size: 16px; font-variant-numeric: tabular-nums; }
+.timer-setting-control > span { font-size: 11px; color: var(--muted); }
 .setting input[type="checkbox"] { appearance: none; flex: 0 0 auto; width: 34px; height: 20px; border-radius: 4px; background: #d4c7a8; border: 1px solid #b5a17a; position: relative; cursor: pointer; margin: 0; transition: background .2s; }
 .setting input[type="checkbox"]::after { content: ''; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 2px; background: #fcf5df; box-shadow: 0 1px 3px #42361d40; transition: transform .2s, background .2s; }
 .setting input[type="checkbox"]:checked { background: #456f4f; border-color: #365a3e; }

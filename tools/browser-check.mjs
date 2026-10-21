@@ -105,7 +105,8 @@ try {
 
   await check('practice lobby, deal, and a played turn against bots', async () => {
     await page.goto(baseUrl.href);
-    await page.selectOption('select[name="turnTimer"]', '0');
+    await page.locator('input[name="turnTimer"]').fill('0');
+    await page.locator('input[name="turnTimer"]').blur();
     assert.equal(await page.locator('#seat-list .seat-row:not(.empty)').count(), 4);
     await page.locator('#deal').click();
     await eventually('my hand of seven', async () => (await page.locator('#hand .card').count()) === 7);
@@ -126,7 +127,8 @@ try {
 
   await check('host rules reach guests, who cannot edit them', async () => {
     assert.deepEqual(await alex.locator('select[name="wildFour"] option').evaluateAll((options) => options.map((option) => option.value)), ['anytime', 'strict']);
-    await alex.locator('select[name="turnTimer"]').selectOption('0');
+    await alex.locator('input[name="turnTimer"]').fill('0');
+    await alex.locator('input[name="turnTimer"]').blur();
     await alex.locator('select[name="stacking"]').selectOption('progressive');
     await eventually('guest sees the rule', async () => (await sam.locator('select[name="stacking"]').inputValue()) === 'progressive');
     assert.equal(await sam.locator('select[name="stacking"]').isDisabled(), true);

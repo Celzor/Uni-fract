@@ -235,9 +235,20 @@ function readSettings() {
   for (const element of $('settings').elements) {
     if (!element.name) continue;
     if (element.type === 'checkbox') settings[element.name] = element.checked;
+    else if (element.type === 'number') settings[element.name] = element.valueAsNumber;
     else settings[element.name] = /^\d+$/.test(element.value) ? Number(element.value) : element.value;
   }
   return settings;
+}
+
+function submitSettings() {
+  const view = live?.view;
+  if (!canEditRules(view) || !$('settings').reportValidity()) return false;
+  const settings = readSettings();
+  if (Object.entries(settings).some(([name, value]) => view.settings[name] !== value)) {
+    send({ type: 'settings', settings });
+  }
+  return true;
 }
 
 function renderTable(view) {
@@ -644,15 +655,20 @@ $('draw-button').addEventListener('click', () => send({ type: 'draw' }));
 $('keep-button').addEventListener('click', () => send({ type: 'keep' }));
 $('call-button').addEventListener('click', () => send({ type: 'call' }));
 $('catch-button').addEventListener('click', () => send({ type: 'catch' }));
-$('deal').addEventListener('click', () => send({ type: 'deal' }));
+$('deal').addEventListener('click', () => {
+  if (submitSettings()) send({ type: 'deal' });
+});
 $('next-round').addEventListener('click', () => send({ type: 'deal' }));
 $('back-to-lobby').addEventListener('click', () => send({ type: 'lobby' }));
 $('seat-toggle').addEventListener('click', () => {
   const view = live?.view;
   if (view) send({ type: 'seat', watch: view.seats.includes(me()) });
 });
-$('settings').addEventListener('change', () => send({ type: 'settings', settings: readSettings() }));
-$('settings').addEventListener('submit', (event) => event.preventDefault());
+$('settings').addEventListener('change', submitSettings);
+$('settings').addEventListener('submit', (event) => {
+  event.preventDefault();
+  submitSettings();
+});
 $('sound').addEventListener('click', () => {
   soundOn = !soundOn;
   gameAudio.setEnabled(soundOn);

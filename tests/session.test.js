@@ -340,6 +340,81 @@ test('the host’s turn timer draws for an idle player and everyone sees the cou
   net.assertConverged();
 });
 
+test('custom turn durations are host controlled, persisted and synchronized without truncating long timers', () => {
+  for (const turnTimer of [1, 3, 7, 90, 600]) {
+    const net = network([1, 2], { clockOffsets: { 1: 100000, 2: 5000, 3: 900000 } });
+    net.act(1, { type: 'settings', settings: { turnTimer } });
+    net.act(2, { type: 'settings', settings: { turnTimer: 30 } });
+    assert.equal(net.game(1).settings.turnTimer, turnTimer, 'a guest cannot change the timer');
+    net.join(3);
+    net.reload(1);
+    net.reload(2);
+    for (const id of net.members) assert.equal(net.game(id).settings.turnTimer, turnTimer);
+    deal(net);
+    for (const id of net.members) assert.equal(net.view(id).timerEndsAt - net.now(id), turnTimer * 1000);
+    net.act(1, { type: 'settings', settings: { turnTimer: 30 } });
+    assert.equal(net.game(1).settings.turnTimer, turnTimer, 'timers cannot change during a round');
+    net.leave(1);
+    assert.equal(net.view(2).isHost, true);
+    for (const id of net.members) {
+      assert.equal(net.game(id).settings.turnTimer, turnTimer);
+      assert.equal(net.view(id).timerEndsAt - net.now(id), turnTimer * 1000);
+    }
+    net.assertConverged();
+  }
+});
+
+test('short custom timers expire at their exact deadline and zero leaves the turn untimed', () => {
+  for (const turnTimer of [0, 1, 3, 7]) {
+    const net = network([1, 2, 3]);
+    restorePosition(net, playing({
+      hands: [['r4', 'b4'], ['r1', 'g2'], ['r5', 'y6']], current: 2, draw: ['y8'],
+      settings: { turnTimer, jumpIn: false },
+    }));
+    const before = net.game(2);
+    if (turnTimer === 0) {
+      for (const id of net.members) assert.equal(net.view(id).timerEndsAt, null);
+      net.timers.advance(600000);
+      net.flush();
+      assert.equal(net.game(2).revision, before.revision);
+      continue;
+    }
+    net.timers.advance(turnTimer * 1000 - 1);
+    net.flush();
+    assert.equal(net.game(2).revision, before.revision);
+    net.timers.advance(1);
+    net.flush();
+    assert.equal(net.game(2).current, 3);
+    assert.equal(net.game(2).hand.length, before.hand.length + 1);
+    assert.equal(net.game(2).log.filter(({ k, by }) => k === 'timeout' && by === 2).length, 1);
+    for (const id of net.members) assert.equal(net.view(id).timerEndsAt - net.now(id), turnTimer * 1000);
+    net.assertConverged();
+  }
+});
+
+test('a playable draw near a speed-round deadline receives at most one chosen turn of grace', () => {
+  for (const turnTimer of [1, 3]) {
+    const net = network([1, 2, 3]);
+    restorePosition(net, playing({
+      hands: [['r4', 'b4'], ['r1', 'g2'], ['r5', 'y6']], current: 2, draw: ['r8'],
+      settings: { turnTimer, jumpIn: false },
+    }));
+    net.timers.advance(turnTimer * 1000 - 100);
+    net.act(2, { type: 'draw' });
+    assert.equal(net.game(2).stage, 'drawn');
+    const deadline = net.now(1) + turnTimer * 1000;
+    for (const id of net.members) assert.equal(net.view(id).timerEndsAt, deadline);
+    net.timers.advance(turnTimer * 1000 - 1);
+    net.flush();
+    assert.equal(net.game(2).current, 2);
+    net.timers.advance(1);
+    net.flush();
+    assert.equal(net.game(2).current, 3);
+    assert.ok(net.game(2).log.some(({ k, by }) => k === 'timeout' && by === 2));
+    net.assertConverged();
+  }
+});
+
 test('the host automatically draws for a stuck guest exactly once, including taking a stack', () => {
   for (const pendingDraw of [0, 4]) {
     const net = network([1, 2, 3]);
