@@ -248,6 +248,8 @@ footer { display: flex; justify-content: space-between; gap: 16px; color: var(--
 
 .dialog { --text: #352e23; --muted: #6e6251; --faint: #79684f; --line: #cfc09d; --raised: #e5d8b7; --sunken: #f6efd9; --cyan: #7d591e; color-scheme: light; border: 1px solid #d7c5a2; border-radius: 5px; background: var(--paper); color: var(--text); padding: 22px; width: min(360px, calc(100vw - 32px)); box-shadow: 0 18px 80px #000a; }
 .dialog::backdrop { background: #120e0bc7; backdrop-filter: blur(3px); }
+/* Keep hand colours visible while choosing a wild card's colour. */
+#color-dialog::backdrop { background: transparent; backdrop-filter: none; }
 .dialog form { display: flex; flex-direction: column; gap: 12px; align-items: stretch; }
 .dialog h2 { font-family: Georgia, "Times New Roman", serif; font-size: 24px; letter-spacing: -.5px; }
 .dialog-copy { color: var(--muted); font-size: 11px; margin-top: -6px; }
