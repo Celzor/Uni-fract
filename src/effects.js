@@ -181,7 +181,7 @@ export function createTableEffects() {
     const dy = finish.y - start.y;
     const direction = dx < 0 ? -1 : 1;
     const drawing = !playing && !deal;
-    const duration = heavy ? 640 : playing ? 470 : deal ? 490 : 1000;
+    const duration = heavy ? 640 : playing ? 470 : deal ? 490 : 1100;
     const endScale = target || playing ? clamp(to.width / cardWidth, 0.5, 1.8) : 0.38;
     const rotation = playing ? ((card * 7) % 9) - 4 : (index % 5 - 2) * 2;
     const arc = heavy ? 100 : playing ? 58 : 35 + Math.min(45, Math.abs(dx) * 0.1);
@@ -352,8 +352,8 @@ export function createTableEffects() {
         // The event stores the number actually drawn, including an exhausted
         // deck. Counting only hand deltas loses draws followed by a forced play.
         const count = clamp(Number.isSafeInteger(entry.n) ? entry.n : 0, 0, DECK_SIZE);
-        // Let each card register, while keeping even a large penalty under 3.4s.
-        const gap = Math.min(220, 2400 / Math.max(1, count - 1));
+        // Give each pickup a little more space, with at most 3.7s for the batch.
+        const gap = Math.min(280, 2600 / Math.max(1, count - 1));
         for (let index = 0; index < count; index += 1) {
           const card = id === selfId ? newCards[newCardIndex++] ?? null : null;
           lastFinish = Math.max(lastFinish, fly({
