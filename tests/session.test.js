@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { DECK_SIZE } from '../src/cards.js';
+import { DECK_SIZE, cardSide, deckSize, flipCard, rankOf } from '../src/cards.js';
+import { playAction } from '../src/bots.js';
 import { AUTO_DRAW_DELAY_MS } from '../src/auto-draw.js';
 import { NEXT_ROUND_DELAY_MS, choicesFor, isValidTable } from '../src/rules.js';
 import { GAME_PROTOCOL, RECOVERY_WINDOW_MS, createSession } from '../src/session.js';
@@ -116,14 +117,15 @@ function network(initialIds = [1, 2, 3], { persistence = true, settings = { turn
         assert.equal(client.view.connected, true, `${id} connected`);
         assert.equal(client.view.hostId, memberIds[0]);
         const mine = client.view.view;
-        for (const key of ['phase', 'round', 'revision', 'current', 'counts', 'discard', 'color', 'pendingDraw', 'scores', 'seats']) {
+        for (const key of ['phase', 'round', 'revision', 'current', 'counts', 'discard', 'color', 'pendingDraw', 'scores', 'seats', 'side']) {
           assert.deepEqual(mine[key], host.view[key], `${id} agrees on ${key}`);
         }
       }
       // Every card is somewhere, exactly once.
+      const expected = deckSize(host.view.settings.gameMode);
       const total = host.view.phase === 'playing'
-        ? host.view.counts.reduce((sum, count) => sum + count, 0) + host.view.drawCount + host.view.discardCount : DECK_SIZE;
-      assert.equal(total, DECK_SIZE);
+        ? host.view.counts.reduce((sum, count) => sum + count, 0) + host.view.drawCount + host.view.discardCount : expected;
+      assert.equal(total, expected);
     },
   };
   if (settings) {
@@ -743,4 +745,41 @@ test('unavailable or corrupt storage never prevents a live game', () => {
     session.act({ type: 'deal' });
     assert.equal(view.view.phase, 'playing');
   }
+});
+
+test('Reverse mode, flipped hands and pile order survive multiplayer reload and host departure', () => {
+  const net = network([1, 2, 3], { settings: { gameMode: 'reverse', turnTimer: 0 } });
+  net.act(2, { type: 'settings', settings: { gameMode: 'classic' } });
+  for (const id of net.members) assert.equal(net.game(id).settings.gameMode, 'reverse');
+  deal(net);
+  net.act(1, { type: 'settings', settings: { gameMode: 'classic' } });
+  assert.equal(net.game(1).settings.gameMode, 'reverse', 'mode cannot change during a round');
+  for (let turn = 0; turn < 400 && net.game(1).side === 'light'; turn += 1) {
+    const id = net.game(1).current;
+    const view = net.game(id);
+    const choices = choicesFor(view, id, view.hand);
+    const card = choices.playable.find((candidate) => rankOf(candidate) === 'f') ?? choices.playable[0];
+    if (card !== undefined) net.act(id, { ...playAction(view, id, card, () => 0.3), call: true });
+    else if (choices.draw) net.act(id, { type: 'draw' });
+    else net.act(id, { type: 'keep' });
+    net.assertConverged();
+  }
+  assert.equal(net.game(1).side, 'dark', 'the shared game reaches its dark side');
+  const hands = [2, 3].map((id) => [...net.game(id).hand]);
+  const discard = [...net.game(2).discard];
+  assert.ok(hands.flat().every((card) => cardSide(card) === 'dark'));
+  const seenByTwo = net.game(2).opponentFaces.find((entry) => entry.id === 3).cards;
+  assert.deepEqual(seenByTwo, hands[1].map(flipCard), 'opponents show the reverse faces');
+  net.reload(3);
+  net.reload(1);
+  assert.equal(net.game(3).side, 'dark');
+  net.leave(1);
+  net.settle();
+  assert.equal(net.view(2).isHost, true);
+  assert.equal(net.game(2).side, 'dark');
+  assert.deepEqual([2, 3].map((id) => net.game(id).hand), hands);
+  assert.deepEqual(net.game(2).discard, discard, 'the full pile order survives recovery');
+  assert.ok(isValidTable(net.hostTable()));
+  net.assertConverged();
+  for (const client of net.clients.values()) client.session.destroy();
 });

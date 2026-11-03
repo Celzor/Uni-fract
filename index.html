@@ -53,6 +53,16 @@
               <div class="section-heading"><h2 id="rules-title">House rules</h2><span id="rules-owner" class="small-label">HOST’S CALL</span></div>
               <p class="rules-note">Settle these before the first hand. Nothing to play? The deck draws for you.</p>
               <form id="settings" class="settings">
+                <label class="setting game-mode-setting"><span><strong>Game mode</strong><small>Classic cards, or a two-sided deck that flips between light and dark.</small></span>
+                  <select name="gameMode"><option value="classic">Classic</option><option value="reverse">No-No Reverse</option></select></label>
+                <details id="reverse-rules" class="reverse-rules" hidden>
+                  <summary>How No-No Reverse works</summary>
+                  <p>Start on the light side. A Flip card turns over every hand and both piles. Match the newly exposed card on the other side; play stays there until the next Flip. Other players can see the opposite faces of your cards.</p>
+                  <p><strong>Light:</strong> red, yellow, green and blue, with Draw One, Skip, Reverse and Wild Draw Two. <strong>Dark:</strong> pink, teal, orange and purple, with Draw Five, Skip Everyone and Wild Draw Colour.</p>
+                  <p>Draw cards make the next player pick up and lose their turn. Wild Draw Colour means drawing until the chosen colour appears. Skip Everyone gives you another turn.</p>
+                  <p>Wild Draw Two and Wild Draw Colour are legal only when you have no card of the current colour. Stacking, jump-ins and 7–0 are off. Other house rules below still apply.</p>
+                  <p>Score the side in play when the round ends: numbers at face value; Draw One 10; other coloured actions 20; Skip Everyone 30; Wild 40; Wild Draw Two 50; Wild Draw Colour 60.</p>
+                </details>
                 <label class="setting"><span><strong>Computer players</strong><small>Bots fill empty seats and give them up when people join.</small></span>
                   <select name="bots"><option value="0">None</option><option value="1">1 bot</option><option value="2">2 bots</option><option value="3">3 bots</option><option value="4">4 bots</option><option value="5">5 bots</option></select></label>
                 <label class="setting"><span><strong>Turn timer</strong><small id="turn-timer-hint">Enter 1–600 seconds. 0 turns the timer off.</small></span>
@@ -107,6 +117,7 @@
                     <div id="discard" class="discard"></div>
                   </div>
                   <div class="table-meta">
+                    <span id="game-side" class="meta-chip game-side" aria-live="polite" hidden>Light side</span>
                     <span id="active-color" class="meta-chip active-color"><span class="swatch" aria-hidden="true"></span><span id="active-color-label">Red</span></span>
                     <span id="direction" class="meta-chip direction"><span class="direction-icon" aria-hidden="true">↻</span><span id="direction-label">Clockwise</span></span>
                     <span id="pending" class="meta-chip pending" hidden></span>
@@ -193,7 +204,7 @@
     <dialog id="color-dialog" class="dialog" aria-labelledby="color-title">
       <form method="dialog">
         <h2 id="color-title">Pick a colour</h2>
-        <p class="dialog-copy">Everyone after you has to match it.</p>
+        <p id="color-copy" class="dialog-copy">Everyone after you has to match it.</p>
         <div class="color-grid">
           <button value="r" class="color-option" data-color="r">Red</button>
           <button value="y" class="color-option" data-color="y">Yellow</button>

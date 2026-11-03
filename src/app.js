@@ -2,7 +2,7 @@ import { connectActivity } from './bridge.js';
 import { createGameAudio } from './audio.js';
 import { createAvatar } from './avatars.js';
 import { createTableEffects } from './effects.js';
-import { COLOR_NAMES, cardImage, cardName, colorOf, isWild, rankName, rankOf, sortHand } from './cards.js';
+import { COLOR_NAMES, cardImage, cardName, colorOf, colorsFor, isWild, rankName, rankOf, sortHand } from './cards.js';
 import { createLocalGame } from './local.js';
 import { MAX_BOTS, MAX_PLAYERS, MIN_PLAYERS, botName, choicesFor, isBotId, topCard } from './rules.js';
 import { createSession } from './session.js';
@@ -98,6 +98,7 @@ function describe(entry) {
     case 'timeout': return [who(entry.by), ' ran out of time'];
     case 'swap': return [who(entry.by), ' swapped hands with ', whom(entry.target)];
     case 'rotate': return ['Every hand moved along'];
+    case 'flip': return [who(entry.by), ` flipped the table to the ${entry.side} side`];
     case 'reshuffle': return ['The discards were shuffled into a fresh deck'];
     case 'left': return [who(entry.by), ' left the table'];
     case 'sub': return [who(entry.by), ' took over the empty seat'];
@@ -219,6 +220,9 @@ const canEditRules = (view) => !!view && !!live?.isHost && !!live?.connected && 
 function renderSettings(view) {
   const form = $('settings');
   const editable = canEditRules(view);
+  const reverse = view?.settings?.gameMode === 'reverse';
+  const classicRules = new Set(['stacking', 'jumpIn', 'sevenZero', 'wildFour']);
+  $('reverse-rules').hidden = !reverse;
   $('rules-owner').textContent = editable ? 'YOU DECIDE' : 'HOST’S CALL';
   for (const element of form.elements) {
     const value = view?.settings?.[element.name];
@@ -226,7 +230,7 @@ function renderSettings(view) {
       if (element.type === 'checkbox') element.checked = value === true;
       else element.value = String(value);
     }
-    element.disabled = !editable;
+    element.disabled = !editable || (reverse && classicRules.has(element.name));
   }
 }
 
@@ -259,7 +263,13 @@ function renderTable(view) {
   const over = view.phase === 'roundOver';
   $('table-arena').classList.toggle('round-over', over);
   const felt = $('felt');
+  const reverse = view.settings.gameMode === 'reverse';
+  $('table').classList.toggle('reverse-mode', reverse);
+  felt.dataset.side = reverse ? view.side : '';
   felt.dataset.color = view.color ?? '';
+  $('game-side').hidden = !reverse;
+  $('game-side').textContent = view.side === 'dark' ? 'Dark side' : 'Light side';
+  $('game-side').title = `No-No Reverse: ${view.side} side. A Flip card turns every hand and both piles over.`;
   felt.classList.toggle('my-turn', myTurn);
   $('play-area').hidden = over;
   $('results').hidden = !over;
@@ -299,11 +309,17 @@ function renderSeats(view) {
     element.append(avatar, copy);
     if (view.phase === 'playing' && !isMe(id)) {
       const fan = node('div', 'opponent-hand');
-      fan.setAttribute('aria-hidden', 'true');
+      const faces = view.opponentFaces?.find((entry) => entry.id === id)?.cards;
+      if (faces) {
+        fan.setAttribute('role', 'group');
+        fan.setAttribute('aria-label', `${nameOf(id)}'s cards on the opposite side`);
+      } else fan.setAttribute('aria-hidden', 'true');
       for (let i = 0; i < count; i += 1) {
         const back = node('img', 'opponent-card');
-        back.src = './assets/card-back.svg';
-        back.alt = '';
+        const face = faces?.[i];
+        back.src = face === undefined ? './assets/card-back.svg' : cardImage(face);
+        back.alt = face === undefined ? '' : `${cardName(face)}, opposite side`;
+        if (face !== undefined) back.title = back.alt;
         back.draggable = false;
         back.style.setProperty('--back-offset', `${count === 1 ? 50 : i / (count - 1) * 100}%`);
         back.style.setProperty('--back-tilt', `${count === 1 ? 0 : (i / (count - 1) - .5) * 8}deg`);
@@ -332,8 +348,14 @@ function rotationFor(card, top) {
 
 function renderPiles(view, choices) {
   const drawPile = $('draw-pile');
+  const drawBack = view.drawBack;
+  for (const back of drawPile.querySelectorAll('.card-back')) {
+    back.style.backgroundImage = drawBack == null ? '' : `url("${cardImage(drawBack)}")`;
+  }
+  drawPile.title = drawBack == null ? 'Draw pile' : `Opposite side showing: ${cardName(drawBack)}`;
   drawPile.disabled = !choices.draw;
-  drawPile.setAttribute('aria-label', choices.draw ? (view.pendingDraw ? `Take ${view.pendingDraw} cards` : 'Draw a card') : `Draw pile, ${plural(view.drawCount, 'card')}`);
+  const drawLabel = choices.draw ? (view.pendingDraw ? `Take ${view.pendingDraw} cards` : 'Draw a card') : `Draw pile, ${plural(view.drawCount, 'card')}`;
+  drawPile.setAttribute('aria-label', drawLabel + (drawBack == null ? '' : `, opposite side showing ${cardName(drawBack)}`));
   $('draw-count').textContent = `${view.drawCount} left`;
 
   const top = topCard(view);
@@ -363,6 +385,8 @@ function renderPiles(view, choices) {
   $('active-color-label').textContent = view.color ? COLOR_NAMES[view.color] : '—';
   $('direction').dataset.direction = String(view.direction);
   $('direction-label').textContent = view.direction === 1 ? 'Clockwise' : 'Counter-clockwise';
+  $('direction').title = $('direction-label').textContent;
+  $('direction').setAttribute('aria-label', $('direction-label').textContent);
   $('pending').hidden = !view.pendingDraw;
   $('pending').textContent = `+${view.pendingDraw} incoming`;
 }
@@ -515,7 +539,7 @@ function renderResults(view) {
   $('results-title').textContent = isMe(winner)
     ? `You win the ${match ? 'match' : 'round'}!`
     : `${nameOf(winner)} wins the ${match ? 'match' : 'round'}!`;
-  $('results-detail').textContent = `+${view.roundPoints} points from the cards left in everyone else’s hands.${match ? ` First to ${view.settings.targetScore}.` : ''}`;
+  $('results-detail').textContent = `+${view.roundPoints} points from the cards left in everyone else’s hands.${view.settings.gameMode === 'reverse' ? ` Scored on the ${view.side} side.` : ''}${match ? ` First to ${view.settings.targetScore}.` : ''}`;
   $('reveal').replaceChildren(...view.reveal.map((entry) => {
     const item = node('li', entry.id === winner ? 'winner' : '');
     const thumbs = node('span', 'thumbs');
@@ -621,7 +645,19 @@ async function playCard(card) {
   const self = me();
   if (!choicesFor(view, self, view.hand).playable.includes(card)) return;
   const action = { type: 'play', card, seq: view.turnSeq };
-  if (isWild(card)) {
+  const flippingToWild = rankOf(card) === 'f' && view.flipTop != null && isWild(view.flipTop);
+  if (isWild(card) || flippingToWild) {
+    const side = flippingToWild ? (view.side === 'dark' ? 'light' : 'dark') : (view.side ?? 'light');
+    const colors = colorsFor(side);
+    $('color-title').textContent = flippingToWild ? 'Pick the new side’s colour' : 'Pick a colour';
+    $('color-copy').textContent = flippingToWild ? 'The Flip uncovers a wild. Choose the colour for the new side.'
+      : rankOf(card) === 'wdc' ? 'The next player draws until they find this colour, then misses their turn.'
+        : 'Everyone after you has to match it.';
+    $('color-dialog').querySelectorAll('.color-option').forEach((button, index) => {
+      button.value = colors[index];
+      button.dataset.color = colors[index];
+      button.textContent = COLOR_NAMES[colors[index]];
+    });
     const color = await choose($('color-dialog'), card);
     if (!color) return;
     action.color = color;
