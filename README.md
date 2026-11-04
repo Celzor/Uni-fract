@@ -57,6 +57,7 @@ The host sets these in the lobby, or between rounds. **Back to lobby** lets the 
 
 | Rule | Options | What it does |
 | --- | --- | --- |
+| Game mode | Classic (default) · No-No Reverse | Classic uses the original deck. Reverse uses 112 two-sided cards, starting on the Light side; Flip cards turn every hand and both piles over. |
 | Computer players | None, 1–5 (practice starts with 3) | Bots fill empty seats and play by the same rules: they stack, jump in, shout “Oh no!” (usually), and will catch you if you forget. People always get priority: someone joining between rounds takes a bot’s seat. |
 | Turn timer | Enter any whole number from 1–600 s; 0 = off (default 30 s) | Set short turns such as 3 or 7 seconds for speed rounds. When time runs out you draw automatically (or take the stacked draws), and your turn ends. A playable drawn card gets at least five seconds to decide, or the chosen turn duration if shorter. |
 | Draw stacking | Off · +2 on +2, +4 on +4 · also +4 on +2 | Answer a draw card with your own to pass the growing total to the next player. Whoever can’t (or won’t) takes the lot and loses their turn. |
@@ -69,7 +70,20 @@ The host sets these in the lobby, or between rounds. **Back to lobby** lets the 
 | Starting hand | 5, 7, 10 | Cards dealt to each player. |
 | Play to | Just keep score · 200 · 500 | The round winner scores everyone else’s cards: face value for numbers, 20 for Skip/Reverse/Draw Two, 50 for wilds. Reaching the target wins the match; the next deal starts a new one. |
 
-Always on: Skip skips the next player; Reverse flips direction (with two players it acts as a Skip); Draw Two and Wild Draw Four make the next player draw and lose their turn unless they can stack. A drawn card that can be played may be played straight away or kept. Rounds open on a number card, and the first player rotates each round. When the draw pile runs out, the discards are reshuffled under the top card.
+In Classic: Skip skips the next player; Reverse flips direction (with two players it acts as a Skip); Draw Two and Wild Draw Four make the next player draw and lose their turn unless they can stack. A drawn card that can be played may be played straight away or kept. Rounds open on a number card, and the first player rotates each round. When the draw pile runs out, the discards are reshuffled under the top card.
+
+### No-No Reverse
+
+Choose **Game mode → No-No Reverse** before dealing. This mode follows the two-sided play and action cards in [Mattel's UNO Flip rules](https://service.mattel.com/instruction_sheets/GDR44-English.pdf), using original No-No artwork and the existing configurable timers, hand size, draw-to-match, forced-play, call and score rules. Stacking, jump-ins and 7–0 are disabled. Wild penalty cards are legal only without a card matching the active colour; the engine enforces this instead of using bluff challenges. Rounds retain the app's number-card opening.
+
+| Side | Colours | Special cards |
+| --- | --- | --- |
+| Light | Red, yellow, green, blue | Draw One, Reverse, Skip, Flip, Wild, Wild Draw Two |
+| Dark | Pink, teal, orange, purple | Draw Five, Reverse, Skip Everyone, Flip, Wild, Wild Draw Colour |
+
+A **Flip** changes every hand and turns both piles over, reversing their order. The newly exposed discard sets the colour; if it is wild, the player who flipped chooses. Its action is not triggered again. Opponents' outward-facing cards and the draw pile show the other side. **Skip Everyone** gives its player another turn. **Wild Draw Colour** makes the next player draw until the chosen colour appears, then miss their turn; another wild does not satisfy that draw.
+
+Score the faces showing at the end: numbers at face value; Draw One 10; Reverse, Skip, Draw Five and Flip 20; Skip Everyone 30; Wild 40; Wild Draw Two 50; Wild Draw Colour 60. Final-card penalties are drawn before scoring. Each new round starts on Light.
 
 If you have no legal card, the table draws for you after a short pause (normally 1.6 seconds, with extra time to catch a missed “Oh no!”). This also takes an unanswered draw stack automatically, including +4s. The host controls automatic draws in multiplayer, so cards are only drawn once.
 
@@ -77,7 +91,7 @@ Keyboard: **D** draw, **O** shout “Oh no!”, **C** catch, **K** keep.
 
 Sound uses short cues for turns, playing and drawing cards, dealing, and round wins. Calling **OH NO!** plays a bundled human voice recording for everyone, with priority over ordinary card sounds. **Sound on / off** mutes every effect and remembers your preference. Only one cue plays at a time; repeated multiplayer snapshots do not replay sounds.
 
-Cards swoop between hands and piles individually. Drawn cards take a second to arrive, spaced apart so each one is visible; large penalties use tighter spacing to keep the animation brief. Draw Fours land with a heavier impact; stacked penalties show a floating total counting up. Round and match wins have a fanfare and confetti. Motion respects your system’s reduced-motion preference.
+Cards swoop between hands and piles individually. Pickups take 1.1 seconds per flight, usually starting 280 milliseconds apart; large penalties use tighter spacing to keep the batch within 3.7 seconds. Draw Fours, Draw Fives and Wild Draw Colour land with a heavier impact; penalties show a floating total. Reverse flips animate the new faces together. Round and match wins have a fanfare and confetti. Motion respects your system’s reduced-motion preference.
 
 Every opponent has a hand panel above the felt, showing one overlapping card back for each card they hold. These stay visible in compact frames, with counts alongside for larger hands. Your own seat sits beside your face-up hand. Refract profile pictures appear when available, with initials as a fallback. A yellow outline and soft glow surround the whole hand area on your turn, with your profile outside it; playable cards lift up. The draw control sits below the deck, with space reserved so turn changes keep the table steady.
 
@@ -97,10 +111,10 @@ Activity frame       Refract host         Other participants
 
 Card games have hidden information, so this goes one step further than tic-tac-toe:
 
-- **The first participant is the host.** Only the host’s copy holds the full table: every hand and the draw pile’s order. It validates every action against Refract’s relayed sender ID, the turn, and a turn sequence number (so a click made just before someone jumped in is refused), runs the turn timer, and plays the computer players. Bots decide from their own view, so they never see anyone else’s cards.
-- **Each participant gets a private view.** After every change the host sends each participant, addressed to them alone, the public table plus *their own* hand. Other hands and the deck order never leave the host’s browser. Spectators receive no hand.
+- **The first participant is the host.** Only the host’s copy holds the full table: every hand and the draw pile’s order. It validates every action against Refract’s relayed sender ID, the turn, and a turn sequence number (so a click made just before someone jumped in is refused), runs the turn timer, and plays the computer players. Bots choose moves from their own view and legal cards.
+- **Each participant gets a private view.** After every change the host sends each participant, addressed to them alone, the public table plus *their own* hand. Classic keeps other hands private. Reverse also shares the opposite faces that would be visible on a physical two-sided deck, plus the full public discard order so it can be turned over. The draw pile's full order stays with the host. Spectators receive no hand of their own.
 - **Late arrivals and reloads** request a snapshot. A small periodic resync recovers any dropped message. The host keeps its full table in `sessionStorage`, scoped by session ID and user, so a host reload resumes exactly where it was.
-- **When the host leaves**, the next participant becomes host and asks everyone for their latest view, which includes their own hand. It adopts the most recent view, keeps every hand that is consistent, re-deals any hand nobody could vouch for (or that two players both claimed), and shuffles the unseen cards into a fresh draw pile. In practice every remaining player keeps their exact cards. Pending draw penalties carry over. Computer players carry on under the new host, but their hands are re-dealt at the same size, since only the old host knew them. The same recovery runs if the host reloads with storage unavailable.
+- **When the host leaves**, the next participant becomes host and asks everyone for their latest view, which includes their own hand. It adopts the most recent view, keeps every hand that is consistent, re-deals any hand nobody could vouch for (or that two players both claimed), and shuffles the unseen cards into a fresh draw pile. In practice every remaining player keeps their exact cards. Pending draw penalties carry over. Classic bots are re-dealt at the same size; Reverse can recover their cards from the publicly visible opposite faces. The same recovery runs if the host reloads with storage unavailable.
 - **Seats follow the call.** Arrivals are seated in the lobby up to six; later arrivals watch. If a player leaves mid-round, the earliest watcher takes over their hand in place; with no watcher, their cards go back into the pile, and with fewer than two players the round returns to the lobby. Anyone can choose to sit out between rounds. Computer players never leave mid-round and use negative player IDs, so they can never collide with a Refract user.
 
 Payloads stay far below Refract’s 16 KiB limit (a view is typically under 2 KiB). Names are rendered as text. No Refract credentials or tokens are requested.
@@ -109,7 +123,7 @@ This is a cooperative casual-game protocol, not an anti-cheat service: the host�
 
 | File | Responsibility |
 | --- | --- |
-| [`src/cards.js`](src/cards.js) | The 108-card deck, names, points, and art paths |
+| [`src/cards.js`](src/cards.js) | Classic and paired Reverse decks, names, points, and art paths |
 | [`src/rules.js`](src/rules.js) | Pure rules engine: every action and house rule, private views, recovery, validation |
 | [`src/session.js`](src/session.js) | Refract session: host authority, per-player snapshots, sync, timers, host hand-over |
 | [`src/clock.js`](src/clock.js) | The host’s turn timer |
@@ -126,7 +140,7 @@ This is a cooperative casual-game protocol, not an anti-cheat service: the host�
 
 Card art lives in [`assets/cards`](assets/cards), named by face: colour `r`/`y`/`g`/`b` followed by `0`–`9`, `s` (skip), `r` (reverse) or `d2`, plus `w` and `wd4`.
 
-All 54 faces use matching editable SVGs with handwritten strokes and four-colour wild symbols. The original cream paper, borders and drawings are preserved, with stronger yellow and blue ink to make those colours more distinct. The source drawing commands are in [`tools/redraw-cards.js`](tools/redraw-cards.js); run `node tools/redraw-cards.js` to regenerate the deck. The older `node tools/redraw-yellow.js` command still regenerates only the yellow faces.
+All 117 face artworks use editable SVGs with handwritten strokes, top-left numbers or symbols, and top-right No No logos. Classic and Light cards use cream paper; Dark cards use charcoal paper and bright pink, teal, orange and purple ink. Colour-letter prefixes are omitted from both corners. The source drawing commands are in [`tools/redraw-cards.js`](tools/redraw-cards.js); run `node tools/redraw-cards.js` to regenerate both decks. The older `node tools/redraw-yellow.js` command still regenerates only the yellow faces.
 
 ## Development checks
 
@@ -136,7 +150,7 @@ npm test
 npm run build
 ```
 
-The suite uses Node’s built-in runner, an in-memory Refract relay, and fake timers, without a real Refract account. It includes a randomized run of 150 complete games across every house-rule combination that checks, after every single move, that all 108 cards are accounted for, every view is valid, and the player on turn always has a legal move. In environments that forbid child processes, run `node --test --test-isolation=none` instead.
+The suite uses Node’s built-in runner, an in-memory Refract relay, and fake timers, without a real Refract account. It includes 150 randomized Classic games and 30 seeded Reverse games, checking card conservation, valid views and legal moves through flips, penalties and recovery. Multiplayer tests cover the mode setting, reloads and host departure; bot rounds cover both modes. In environments that forbid child processes, run `node --test --test-isolation=none` instead.
 
 An optional browser smoke test exercises practice mode and the multiplayer preview, including a host leaving mid-round:
 
@@ -147,9 +161,12 @@ npx playwright install chromium
 node tools/browser-check.mjs
 node tools/countdown-check.mjs
 node tools/custom-timer-check.mjs
+node tools/reverse-check.mjs
 ```
 
 These checks accept `TEST_URL` (defaults to `http://127.0.0.1:4173/`), `PLAYWRIGHT_MODULE` for an existing Playwright installation, and `PLAYWRIGHT_CHROMIUM_EXECUTABLE` for an existing Chromium-based browser such as Edge or Chrome. The countdown check covers the three-second pause and early deal rejection; the custom timer check covers entered times, input validation, synchronization, and speed-round expiry. Screenshots go to the ignored `artifacts/` folder. A protocol simulator verifies the app’s side of the contract; final acceptance uses signed-in users in an actual Refract call.
+
+The Reverse check starts its own temporary local server when `TEST_URL` is omitted. It exercises the mode menu, both flip directions, colour choices, penalties, round completion and artwork loading.
 
 ## License
 

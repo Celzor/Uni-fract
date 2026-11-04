@@ -139,7 +139,7 @@ export function createSession({ send, onChange, storage = browserStorage(), rand
     }
   }
 
-  /** Each participant receives a private view: their own hand, never anyone else's. */
+  /** Each participant gets their own hand plus the mode's publicly visible faces. */
   function publish(targets = others(), replyTo) {
     if (!isHost() || !table || recovery) return;
     const members = ids();

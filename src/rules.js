@@ -1,5 +1,5 @@
 import {
-  COLORS, DECK_SIZE, colorOf, drawAmount, faceOf, isCard, isNumber, isWild, points, rankOf, shuffle,
+  DECK_SIZE, cardSide, colorOf, colorsFor, deckFor, deckSize, drawAmount, faceOf, flipCard, isCard, isNumber, isWild, points, rankOf, shuffle,
 } from './cards.js';
 
 export const MIN_PLAYERS = 2;
@@ -21,6 +21,7 @@ export const botIds = (settings) => Array.from({ length: settings.bots }, (_, in
 export const botName = (id) => BOT_NAMES[-id - 1];
 
 export const SETTING_OPTIONS = Object.freeze({
+  gameMode: Object.freeze(['classic', 'reverse']),
   bots: Object.freeze([0, 1, 2, 3, 4, 5]),
   turnTimer: TURN_TIMER_LIMITS,
   stacking: Object.freeze(['off', 'same', 'progressive']),
@@ -35,6 +36,7 @@ export const SETTING_OPTIONS = Object.freeze({
 });
 
 export const DEFAULT_SETTINGS = Object.freeze({
+  gameMode: 'classic',
   bots: 0,
   turnTimer: 30,
   stacking: 'same',
@@ -56,6 +58,8 @@ const isPlayerId = (value) => isId(value) || isBotId(value);
 const isIdList = (value, max = Infinity, valid = isId) => Array.isArray(value) && value.length <= max
   && value.every(valid) && new Set(value).size === value.length;
 const isCardList = (value) => Array.isArray(value) && value.every(isCard) && new Set(value).size === value.length;
+const belongsToDeck = (table, card) => isCard(card) && (table.settings.gameMode === 'reverse'
+  ? card >= DECK_SIZE && cardSide(card) === table.side : card < DECK_SIZE);
 
 function validSetting(key, value) {
   const options = SETTING_OPTIONS[key];
@@ -70,6 +74,7 @@ export function normalizeSettings(input, base = DEFAULT_SETTINGS) {
     const wanted = isRecord(input) && Object.hasOwn(input, key) ? input[key] : base?.[key];
     settings[key] = validSetting(key, wanted) ? wanted : DEFAULT_SETTINGS[key];
   }
+  if (settings.gameMode === 'reverse') Object.assign(settings, { stacking: 'off', jumpIn: false, sevenZero: false, wildFour: 'strict' });
   return settings;
 }
 
@@ -77,6 +82,8 @@ export function normalizeSettings(input, base = DEFAULT_SETTINGS) {
 export function migrateSnapshot(snapshot) {
   if (!isRecord(snapshot)) return snapshot;
   let next = Object.hasOwn(snapshot, 'nextRoundAt') ? snapshot : { ...snapshot, nextRoundAt: null };
+  if (!Object.hasOwn(next, 'side')) next = { ...next, side: 'light' };
+  if (isRecord(next.settings) && !Object.hasOwn(next.settings, 'gameMode')) next = { ...next, settings: { ...next.settings, gameMode: 'classic' } };
   if (isRecord(next.settings) && next.settings.wildFour === 'challenge') {
     next = { ...next, settings: { ...next.settings, wildFour: 'anytime' }, wd4: null };
   }
@@ -84,7 +91,8 @@ export function migrateSnapshot(snapshot) {
 }
 
 const validSettings = (settings) => isRecord(settings)
-  && Object.keys(SETTING_OPTIONS).every((key) => validSetting(key, settings[key]));
+  && Object.keys(SETTING_OPTIONS).every((key) => validSetting(key, settings[key]))
+  && (settings.gameMode !== 'reverse' || (settings.stacking === 'off' && !settings.jumpIn && !settings.sevenZero && settings.wildFour === 'strict'));
 
 export function createTable({ settings } = {}) {
   return {
@@ -92,6 +100,7 @@ export function createTable({ settings } = {}) {
     round: 0,
     revision: 0,
     settings: normalizeSettings(settings),
+    side: 'light',
     seats: [],
     sittingOut: [],
     scores: {},
@@ -141,12 +150,13 @@ function stackable(settings, top, card) {
  */
 export function playCheck(table, playerId, hand, card) {
   if (table.phase !== 'playing' || !Array.isArray(hand) || !hand.includes(card)) return null;
+  if (!belongsToDeck(table, card)) return null;
   const top = topCard(table);
   if (playerId === table.current) {
     if (table.stage === 'drawn' && card !== table.drawnCard) return null;
     if (table.pendingDraw > 0) return stackable(table.settings, top, card) ? { jumpIn: false } : null;
     if (!isWild(card) && colorOf(card) !== table.color && rankOf(card) !== rankOf(top)) return null;
-    if (rankOf(card) === 'wd4' && table.settings.wildFour === 'strict'
+    if (((rankOf(card) === 'wd4' && table.settings.wildFour === 'strict') || ['wd2', 'wdc'].includes(rankOf(card)))
       && hand.some((other) => other !== card && colorOf(other) === table.color)) return null;
     return { jumpIn: false };
   }
@@ -192,11 +202,12 @@ export function choicesFor(table, playerId, hand) {
   };
 }
 
-export function bestColor(hand, random = Math.random) {
-  const counts = Object.fromEntries(COLORS.map((color) => [color, 0]));
-  for (const card of hand) if (!isWild(card)) counts[colorOf(card)] += 1;
+export function bestColor(hand, random = Math.random, side = cardSide(hand[0])) {
+  const colors = colorsFor(side);
+  const counts = Object.fromEntries(colors.map((color) => [color, 0]));
+  for (const card of hand) if (!isWild(card) && colors.includes(colorOf(card))) counts[colorOf(card)] += 1;
   const most = Math.max(...Object.values(counts));
-  const options = COLORS.filter((color) => counts[color] === most);
+  const options = colors.filter((color) => counts[color] === most);
   return options[Math.floor(random() * options.length)];
 }
 
@@ -308,7 +319,8 @@ function startRound(s, random) {
   }
   for (const id of s.seats) if (!isCount(s.scores[id])) s.scores[id] = 0;
   s.round += 1;
-  const deck = shuffle([...Array(DECK_SIZE).keys()], random);
+  s.side = 'light';
+  const deck = shuffle(deckFor(s.settings.gameMode), random);
   s.hands = s.seats.map(() => []);
   for (let i = 0; i < s.settings.handSize; i += 1) {
     for (const hand of s.hands) hand.push(deck.pop());
@@ -356,6 +368,7 @@ function finishRound(s, winnerId, now) {
 
 function abandon(s) {
   s.phase = 'lobby';
+  s.side = 'light';
   s.discard = [];
   s.color = null;
   s.direction = 1;
@@ -377,7 +390,11 @@ function doPlay(s, playerId, action, random, now) {
   if (!check || (!check.jumpIn && action.seq !== s.turnSeq)) return false;
   const rank = rankOf(card);
   const wild = isWild(card);
-  if (wild && !COLORS.includes(color)) return false;
+  const flipping = s.settings.gameMode === 'reverse' && rank === 'f';
+  const nextSide = s.side === 'dark' ? 'light' : 'dark';
+  const flipTop = flipping ? flipCard(s.discard[0]) : null;
+  if (wild && !colorsFor(s.side).includes(color)) return false;
+  if (flipping && isWild(flipTop) && !colorsFor(nextSide).includes(color)) return false;
   const finishing = hand.length === 1;
   const swapping = s.settings.sevenZero && rank === '7' && !finishing;
   if (swapping && (!s.seats.includes(target) || target === playerId)) return false;
@@ -404,6 +421,28 @@ function doPlay(s, playerId, action, random, now) {
   }
 
   const amount = drawAmount(card);
+  if (flipping) {
+    s.side = nextSide;
+    s.hands = s.hands.map((cards) => cards.map(flipCard));
+    s.drawPile = s.drawPile.reverse().map(flipCard);
+    s.discard = s.discard.reverse().map(flipCard);
+    s.color = isWild(topCard(s)) ? color : colorOf(topCard(s));
+    addLog(s, { k: 'flip', by: playerId, side: s.side, color: s.color });
+  }
+  if (rank === 'wdc') {
+    const victimIndex = step(s, index, 1);
+    let count = 0;
+    for (;;) {
+      const [drawn] = drawCards(s, victimIndex, 1, random);
+      if (drawn === undefined) break;
+      count += 1;
+      if (colorOf(drawn) === color) break;
+    }
+    addLog(s, { k: 'take', by: s.seats[victimIndex], n: count, color });
+    if (finishing) finishRound(s, playerId, now);
+    else pass(s, index, 2);
+    return true;
+  }
   if (finishing) {
     // A final draw card still lands before the round is scored.
     if (amount) {
@@ -421,6 +460,7 @@ function doPlay(s, playerId, action, random, now) {
     return pass(s, index, s.seats.length === 2 ? 2 : 1);
   }
   if (rank === 's') return pass(s, index, 2);
+  if (rank === 'sa') return pass(s, index, s.seats.length);
   if (amount) {
     s.pendingDraw += amount;
     const canRespond = s.settings.stacking !== 'off';
@@ -588,6 +628,9 @@ export function applyAction(state, playerId, action, { hostId = null, memberIds 
       if (playerId !== hostId || s.phase === 'playing' || !isRecord(action.settings)) break;
       const next = normalizeSettings(action.settings, s.settings);
       ok = JSON.stringify(next) !== JSON.stringify(s.settings);
+      if (next.gameMode !== s.settings.gameMode) {
+        abandon(s);
+      }
       s.settings = next;
       // Adding or removing computer players changes who is seated.
       seatMembers(s, members);
@@ -621,7 +664,8 @@ export function expireTurn(state, random = Math.random, now = Date.now) {
     doPlay(s, id, {
       card,
       seq: s.turnSeq,
-      color: isWild(card) ? bestColor(rest, random) : undefined,
+      color: isWild(card) ? bestColor(rest, random, s.side)
+        : rankOf(card) === 'f' && isWild(flipCard(s.discard[0])) ? bestColor(rest.map(flipCard), random, s.side === 'dark' ? 'light' : 'dark') : undefined,
       target: smallestHand(s, id),
     }, random, now);
   }
@@ -653,7 +697,7 @@ export function abandonRound(state) {
   return s;
 }
 
-/** What one participant may see. Other hands and the draw order never leave the host. */
+/** A participant's active hand and public table, including Reverse's printed card backs. */
 export function viewFor(table, viewerId) {
   const seat = table.seats.indexOf(viewerId);
   const playing = table.phase === 'playing';
@@ -662,12 +706,13 @@ export function viewFor(table, viewerId) {
     round: table.round,
     revision: table.revision,
     settings: normalizeSettings(table.settings),
+    side: table.side ?? 'light',
     seats: [...table.seats],
     sittingOut: [...table.sittingOut],
     scores: { ...table.scores },
     counts: playing ? table.hands.map((hand) => hand.length) : [],
     drawCount: table.drawPile.length,
-    discard: table.discard.slice(-VISIBLE_DISCARD),
+    discard: table.settings.gameMode === 'reverse' ? [...table.discard] : table.discard.slice(-VISIBLE_DISCARD),
     discardCount: table.discard.length,
     color: table.color,
     direction: table.direction,
@@ -688,6 +733,11 @@ export function viewFor(table, viewerId) {
     log: clone(table.log),
     hand: playing && seat >= 0 ? [...table.hands[seat]] : null,
     drawnCard: playing && viewerId === table.current ? table.drawnCard : null,
+    ...(playing && table.settings.gameMode === 'reverse' ? {
+      flipTop: flipCard(table.discard[0]),
+      drawBack: table.drawPile.length ? flipCard(table.drawPile.at(-1)) : null,
+      opponentFaces: table.seats.filter((id) => id !== viewerId).map((id) => ({ id, cards: table.hands[table.seats.indexOf(id)].map(flipCard) })),
+    } : {}),
   };
 }
 
@@ -697,9 +747,11 @@ export function viewFor(table, viewerId) {
  * re-dealt from the unseen cards, which also become a freshly shuffled pile.
  */
 export function rebuildTable(view, reports = new Map(), random = Math.random) {
+  view = migrateSnapshot(view);
   const t = createTable({ settings: view.settings });
   Object.assign(t, {
     phase: view.phase,
+    side: view.side,
     round: view.round,
     revision: view.revision + 1,
     seats: [...view.seats],
@@ -726,11 +778,18 @@ export function rebuildTable(view, reports = new Map(), random = Math.random) {
   });
   if (t.phase !== 'playing') return t;
 
-  // A card claimed twice (a stale report, or a fib) is trusted for nobody.
+  // Printed Reverse backs already identify other seats' current physical cards,
+  // including bots and peers that cannot report after a host departure.
+  const publicBacks = t.settings.gameMode === 'reverse' && Array.isArray(view.opponentFaces) ? view.opponentFaces : [];
   const claims = t.seats.map((id, index) => {
-    const claim = reports.get(id)?.hand;
-    return isCardList(claim) && claim.length === view.counts[index] ? claim : null;
+    const validHand = (cards) => isCardList(cards) && cards.every((card) => belongsToDeck(t, card)) && cards.length === view.counts[index];
+    const shown = publicBacks.filter((entry) => entry?.id === id);
+    const visibleHand = shown.length === 1 && isCardList(shown[0].cards) ? shown[0].cards.map(flipCard) : null;
+    if (validHand(visibleHand)) return visibleHand;
+    const reported = reports.get(id)?.hand;
+    return validHand(reported) ? reported : null;
   });
+  // A card claimed twice (a stale report, or a fib) is trusted for nobody.
   const claimCount = new Map();
   for (const card of [...t.discard, ...claims.flatMap((claim) => claim ?? [])]) claimCount.set(card, (claimCount.get(card) ?? 0) + 1);
   const used = new Set(t.discard);
@@ -743,7 +802,7 @@ export function rebuildTable(view, reports = new Map(), random = Math.random) {
     missing.push(index);
     return [];
   });
-  const pool = shuffle([...Array(DECK_SIZE).keys()].filter((card) => !used.has(card)), random);
+  const pool = shuffle(deckFor(t.settings.gameMode, t.side).filter((card) => !used.has(card)), random);
   for (const index of missing) t.hands[index] = pool.splice(0, view.counts[index]);
   t.drawPile = pool;
   const drawn = reports.get(view.current)?.drawnCard;
@@ -775,19 +834,21 @@ function validCommon(t) {
     && ['round', 'revision', 'turnSeq', 'turnNo', 'pendingDraw', 'roundPoints'].every((key) => isCount(t[key]))
     && (t.nextRoundAt === undefined || t.nextRoundAt === null || (Number.isFinite(t.nextRoundAt) && t.nextRoundAt >= 0))
     && validSettings(t.settings)
+    && ['light', 'dark'].includes(t.side) && (t.settings.gameMode === 'reverse' || t.side === 'light')
     // Seats hold people, or only the computer players the host added.
     && isIdList(t.seats, MAX_PLAYERS, isPlayerId) && t.seats.every((id) => isId(id) || botIds(t.settings).includes(id))
     && isIdList(t.sittingOut)
-    && validScores(t.scores) && Array.isArray(t.discard) && t.discard.every(isCard)
+    && validScores(t.scores) && isCardList(t.discard) && t.discard.every((card) => belongsToDeck(t, card))
     && (t.direction === 1 || t.direction === -1) && (t.stage === 'play' || t.stage === 'drawn')
     && isIdList(t.called, Infinity, isPlayerId) && optionalPlayer(t.exposed) && optionalPlayer(t.winner) && optionalPlayer(t.matchWinner)
-    && validLastPlay(t.lastPlay) && validReveal(t.reveal) && validLog(t.log)
+    && validLastPlay(t.lastPlay) && validReveal(t.reveal) && t.reveal.every((entry) => entry.cards.every((card) => belongsToDeck(t, card))) && validLog(t.log)
     && (t.wd4 === null || (isRecord(t.wd4) && isPlayerId(t.wd4.by)));
 }
 
 function validPlaying(t, counts) {
   if (t.seats.length < MIN_PLAYERS || counts.length !== t.seats.length || !counts.every(isCount)) return false;
-  if (!t.discard.length || !COLORS.includes(t.color) || !t.seats.includes(t.current)) return false;
+  if (!t.discard.length || !colorsFor(t.side).includes(t.color) || !t.seats.includes(t.current)) return false;
+  if (t.settings.gameMode === 'reverse' && t.pendingDraw !== 0) return false;
   if (!t.called.every((id) => t.seats.includes(id)) || (t.exposed !== null && !t.seats.includes(t.exposed))) return false;
   return t.stage === 'play' || t.pendingDraw === 0;
 }
@@ -798,12 +859,14 @@ function validResting(t) {
 
 export function isValidTable(t) {
   try {
+    t = migrateSnapshot(t);
     if (!validCommon(t) || !isCount(t.logSeq) || !Array.isArray(t.hands) || !Array.isArray(t.drawPile)) return false;
     if (t.wd4 !== null && typeof t.wd4.bluff !== 'boolean') return false;
     if (t.phase !== 'playing') return validResting(t) && t.hands.length === 0 && t.drawPile.length === 0 && t.drawnCard === null;
     if (!t.hands.every(Array.isArray) || !validPlaying(t, t.hands.map((hand) => hand.length))) return false;
     const everyCard = [...t.hands.flat(), ...t.drawPile, ...t.discard];
-    if (everyCard.length !== DECK_SIZE || !everyCard.every(isCard) || new Set(everyCard).size !== DECK_SIZE) return false;
+    const size = deckSize(t.settings.gameMode);
+    if (everyCard.length !== size || !everyCard.every((card) => belongsToDeck(t, card)) || new Set(everyCard).size !== size) return false;
     const currentHand = t.hands[t.seats.indexOf(t.current)];
     return t.stage === 'drawn' ? currentHand.includes(t.drawnCard) : t.drawnCard === null;
   } catch {
@@ -814,18 +877,32 @@ export function isValidTable(t) {
 /** Structural checks for a snapshot received from the host or a peer. */
 export function isValidView(v, memberIds = null, viewerId = null) {
   try {
+    v = migrateSnapshot(v);
     if (!validCommon(v) || !isCount(v.drawCount) || !isCount(v.discardCount)) return false;
-    if (v.discard.length > VISIBLE_DISCARD || v.discardCount < v.discard.length) return false;
-    if (v.drawCount + v.discardCount > DECK_SIZE || !Array.isArray(v.counts)) return false;
+    const reverse = v.settings.gameMode === 'reverse';
+    const size = deckSize(v.settings.gameMode);
+    if ((reverse ? v.discard.length !== v.discardCount : v.discard.length > VISIBLE_DISCARD) || v.discardCount < v.discard.length) return false;
+    if (v.drawCount + v.discardCount > size || !Array.isArray(v.counts)) return false;
     if (memberIds && !v.seats.every((id) => isBotId(id) || memberIds.includes(id))) return false;
     const seat = viewerId === null ? -1 : v.seats.indexOf(viewerId);
     if (v.phase !== 'playing') {
       return validResting(v) && v.counts.length === 0 && v.hand === null && v.drawnCard === null;
     }
     if (!validPlaying(v, v.counts)) return false;
-    if (v.counts.reduce((sum, count) => sum + count, 0) + v.drawCount + v.discardCount !== DECK_SIZE) return false;
+    if (v.counts.reduce((sum, count) => sum + count, 0) + v.drawCount + v.discardCount !== size) return false;
+    if (reverse) {
+      const oppositeCard = (card) => isCard(card) && card >= DECK_SIZE && cardSide(card) !== v.side;
+      if (v.flipTop !== flipCard(v.discard[0]) || (v.drawCount ? !oppositeCard(v.drawBack) : v.drawBack !== null)) return false;
+      if (!Array.isArray(v.opponentFaces) || !isIdList(v.opponentFaces.map((entry) => entry?.id), MAX_PLAYERS, isPlayerId)) return false;
+      if (!v.opponentFaces.every((entry) => v.seats.includes(entry.id) && isCardList(entry.cards)
+        && entry.cards.length === v.counts[v.seats.indexOf(entry.id)] && entry.cards.every(oppositeCard))) return false;
+      if (viewerId !== null && (v.opponentFaces.length !== v.seats.length - (seat >= 0 ? 1 : 0)
+        || v.opponentFaces.some((entry) => entry.id === viewerId))) return false;
+      const known = [...v.discard, ...(v.hand ?? []), ...v.opponentFaces.flatMap((entry) => entry.cards.map(flipCard)), ...(v.drawBack === null ? [] : [flipCard(v.drawBack)])];
+      if (new Set(known).size !== known.length) return false;
+    }
     if (seat < 0) return v.hand === null && v.drawnCard === null;
-    if (!isCardList(v.hand) || v.hand.length !== v.counts[seat]) return false;
+    if (!isCardList(v.hand) || !v.hand.every((card) => belongsToDeck(v, card)) || v.hand.length !== v.counts[seat]) return false;
     if (v.drawnCard !== null && (v.current !== viewerId || v.stage !== 'drawn' || !v.hand.includes(v.drawnCard))) return false;
     return v.drawnCard !== null || v.current !== viewerId || v.stage === 'play';
   } catch {

@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createGameAudio } from '../src/audio.js';
+import { deckFor, faceOf } from '../src/cards.js';
 import { applyAction, viewFor } from '../src/rules.js';
 import { cardPicker, playing } from './helpers.js';
 
@@ -52,6 +53,26 @@ test('initial history stays silent, while joining on your turn gives one nudge',
   const finished = audio();
   finished.controller.update(snapshot({ phase: 'roundOver', log: [{ seq: 3, n: 3, k: 'win' }] }), 1);
   assert.deepEqual(finished.played, []);
+});
+
+test('Reverse actions use the matching sound weight and flips do not replay on resync', () => {
+  for (const [side, face, expected] of [
+    ['light', 'rd1', 'stack.wav'], ['light', 'wd2', 'stack.wav'],
+    ['dark', 'td5', 'impact.wav'], ['dark', 'dwc', 'impact.wav'],
+    ['light', 'rf', 'deal.wav'],
+  ]) {
+    const h = audio();
+    const card = deckFor('reverse', side).find((id) => faceOf(id) === face);
+    assert.notEqual(card, undefined);
+    h.controller.update(snapshot({ side }), 1);
+    const log = [{ seq: 1, n: 1, k: 'play', by: 2, card }];
+    if (face === 'rf') log.push({ seq: 2, n: 2, k: 'flip', by: 2, side: 'dark' });
+    const next = snapshot({ side: face === 'rf' ? 'dark' : side, revision: 2, log });
+    h.controller.update(next, 1);
+    h.controller.update(next, 1);
+    assert.deepEqual(h.played, [expected], face);
+    h.controller.destroy();
+  }
 });
 
 test('real consecutive single-card draws each sound once, including a draw that keeps your turn', () => {

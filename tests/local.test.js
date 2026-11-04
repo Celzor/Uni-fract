@@ -18,6 +18,8 @@ test('bots play whole rounds among themselves while you watch, under every house
     [1, {}],
     [2, { stacking: 'progressive', sevenZero: true, drawToMatch: true, turnTimer: 10 }],
     [3, { stacking: 'off', forcePlay: true, wildFour: 'strict', mustCall: false, handSize: 10 }],
+    [4, { gameMode: 'reverse', turnTimer: 0 }],
+    [5, { gameMode: 'reverse', drawToMatch: true, forcePlay: true, turnTimer: 7 }],
   ]) {
     const h = practice({ bots: MAX_BOTS, seed });
     const { game, timers } = h;

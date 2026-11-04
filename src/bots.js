@@ -1,4 +1,4 @@
-import { colorOf, drawAmount, isWild, rankOf } from './cards.js';
+import { colorOf, drawAmount, flipCard, isWild, rankOf } from './cards.js';
 import { bestColor, isBotId, playCheck, smallestHand, viewFor } from './rules.js';
 
 /** Bots decide from their own view, so they never see another player's hand. */
@@ -9,7 +9,8 @@ function botView(table, botId) {
 export function playAction(view, botId, card, random = Math.random) {
   const rest = view.hand.filter((other) => other !== card);
   const action = { type: 'play', card, seq: view.turnSeq };
-  if (isWild(card)) action.color = bestColor(rest, random);
+  if (isWild(card)) action.color = bestColor(rest, random, view.side);
+  if (rankOf(card) === 'f' && isWild(view.flipTop)) action.color = bestColor(rest.map(flipCard), random, view.side === 'dark' ? 'light' : 'dark');
   if (view.settings.sevenZero && rankOf(card) === '7' && rest.length) action.target = smallestHand(view, botId, view.counts);
   return action;
 }
@@ -23,7 +24,7 @@ function score(view, botId, card, random) {
   if (isWild(card)) value -= rank === 'wd4' ? 30 : 20;
   else if (colorOf(card) === view.color) value += 8;
   if (/^\d$/.test(rank)) value += Number(rank) / 2;
-  if (rank === 's' || rank === 'r' || drawAmount(card)) value += threatened ? 15 : 3;
+  if (rank === 's' || rank === 'sa' || rank === 'r' || rank === 'wdc' || drawAmount(card)) value += threatened ? 15 : 3;
   // Save the 7 for when someone is close to winning.
   if (view.settings.sevenZero && rank === '7') value += threatened ? 6 : -4;
   return value;

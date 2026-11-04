@@ -1,4 +1,4 @@
-import { DECK_SIZE, cardImage, rankOf } from './cards.js';
+import { cardImage, deckSize, drawAmount, rankOf } from './cards.js';
 
 const BACK_IMAGE = 'assets/card-back.svg';
 const COLORS = ['#db6149', '#ffd21c', '#72a978', '#1673ed', '#f1e0b7'];
@@ -288,6 +288,21 @@ export function createTableEffects() {
     }
     // Hydration, repeated snapshots and a restored older host are baselines.
     if (!prior || restarted || view.revision === prior.revision) return;
+    if (view.side !== prior.side) {
+      // Old flights belong to the previous face of the deck. Restore their
+      // targets before revealing the new side, without delaying game actions.
+      clear();
+      if (fresh.some((entry) => entry.k === 'flip')) {
+        for (const element of document.querySelectorAll('.card img, .opponent-card, .pile-card img, .draw-pile .card-back')) {
+          animate(element, [{ transform: 'scaleX(.08)' }, { transform: 'scaleX(1)' }],
+            { duration: 420, easing: 'ease-out' });
+        }
+        if (view.phase === 'roundOver') later(460, () => celebrate(view.matchWinner !== null));
+        return;
+      }
+      // Starting the next round resets Dark to Light; still animate its deal.
+      if (!fresh.some((entry) => entry.k === 'deal')) return;
+    }
     if (!fresh.length && view.pendingDraw <= prior.pendingDraw) return;
 
     const after = capture();
@@ -302,6 +317,10 @@ export function createTableEffects() {
     const oldHand = new Set(handFor(prior, selfId));
     const shuffledHands = fresh.some((entry) => entry.k === 'swap' || entry.k === 'rotate');
     const newCards = shuffledHands ? [] : handFor(view, selfId).filter((card) => !oldHand.has(card));
+    const opponentDraws = new Map((view.opponentFaces ?? []).map(({ id, cards }) => {
+      const old = new Set(prior.opponentFaces?.find((entry) => entry.id === id)?.cards ?? []);
+      return [id, cards.filter((card) => !old.has(card))];
+    }));
     // A timed-out forced play may draw and play the same card in one update.
     for (const entry of fresh) {
       if (!shuffledHands && entry.k === 'play' && entry.by === selfId && !oldHand.has(entry.card) && !newCards.includes(entry.card)) {
@@ -312,10 +331,11 @@ export function createTableEffects() {
     let landing = 0;
     let lastFinish = 0;
     let heavyLanding = null;
+    let heavyAmount = 0;
 
     for (const entry of fresh) {
       if (entry.k === 'deal' && view.phase === 'playing' && deck) {
-        const count = Math.min(DECK_SIZE, view.counts.reduce((sum, value) => sum + value, 0));
+        const count = Math.min(deckSize(view.settings?.gameMode), view.counts.reduce((sum, value) => sum + value, 0));
         const gap = Math.min(42, 1250 / Math.max(1, count));
         const selfHand = handFor(view, selfId);
         let dealt = 0;
@@ -324,7 +344,8 @@ export function createTableEffects() {
           for (let seat = 0; seat < view.seats.length && dealt < count; seat += 1) {
             if (index >= view.counts[seat]) continue;
             const id = view.seats[seat];
-            const card = id === selfId ? selfHand[index] ?? null : null;
+            const card = id === selfId ? selfHand[index] ?? null
+              : view.opponentFaces?.find((entry) => entry.id === id)?.cards[index] ?? null;
             lastFinish = Math.max(lastFinish, fly({
               from: deck, to: targetRect(id, card), card, width: cardWidth, delay: dealt * gap, deal: true, index: dealt,
               target: card === null ? null : after?.cardElements.get(card),
@@ -333,7 +354,7 @@ export function createTableEffects() {
           }
         }
       } else if (entry.k === 'play' && discard) {
-        const heavy = rankOf(entry.card) === 'wd4';
+        const heavy = ['wd4', 'd5', 'wdc'].includes(rankOf(entry.card));
         const from = (entry.by === selfId ? before?.cards.get(entry.card) : null)
           ?? before?.seats.get(entry.by) ?? (entry.by === selfId ? before?.hand : null) ?? deck;
         const finish = fly({
@@ -344,6 +365,8 @@ export function createTableEffects() {
         landing = finish * 0.82;
         if (heavy) {
           heavyLanding = landing;
+          heavyAmount = rankOf(entry.card) === 'wdc'
+            ? fresh.find((event) => event.k === 'take')?.n ?? 0 : drawAmount(entry.card);
           const point = center(discard);
           later(landing, () => impact(point, true));
         }
@@ -351,11 +374,11 @@ export function createTableEffects() {
         const id = entry.k === 'catch' || (entry.k === 'challenge' && entry.won) ? entry.target : entry.by;
         // The event stores the number actually drawn, including an exhausted
         // deck. Counting only hand deltas loses draws followed by a forced play.
-        const count = clamp(Number.isSafeInteger(entry.n) ? entry.n : 0, 0, DECK_SIZE);
+        const count = clamp(Number.isSafeInteger(entry.n) ? entry.n : 0, 0, deckSize(view.settings?.gameMode));
         // Give each pickup a little more space, with at most 3.7s for the batch.
         const gap = Math.min(280, 2600 / Math.max(1, count - 1));
         for (let index = 0; index < count; index += 1) {
-          const card = id === selfId ? newCards[newCardIndex++] ?? null : null;
+          const card = id === selfId ? newCards[newCardIndex++] ?? null : opponentDraws.get(id)?.shift() ?? null;
           lastFinish = Math.max(lastFinish, fly({
             from: deck, to: targetRect(id, card), card, width: cardWidth,
             delay: (landing ? landing + 85 : 0) + index * gap, index,
@@ -369,7 +392,7 @@ export function createTableEffects() {
     if (discard && (grew || heavyLanding !== null)) {
       const point = center(discard);
       const from = prior.pendingDraw;
-      const to = grew ? view.pendingDraw : from + 4;
+      const to = grew ? view.pendingDraw : from + heavyAmount;
       later(heavyLanding ?? landing, () => tally(point, from, to));
     }
     if (view.phase === 'roundOver' && prior.phase !== 'roundOver' && fresh.some((entry) => entry.k === 'win')) {

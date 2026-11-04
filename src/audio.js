@@ -1,4 +1,4 @@
-import { drawAmount, isCard } from './cards.js';
+import { drawAmount, isCard, rankOf } from './cards.js';
 
 const CUES = Object.freeze({
   play: { volume: 0.22, priority: 1 },
@@ -19,12 +19,13 @@ function eventCue(entry, view) {
   switch (entry.k) {
     case 'play': {
       const amount = isCard(entry.card) ? drawAmount(entry.card) : 0;
-      return amount === 4 ? 'impact' : amount === 2 ? 'stack' : 'play';
+      return amount >= 4 || (isCard(entry.card) && rankOf(entry.card) === 'wdc') ? 'impact'
+        : amount > 0 ? 'stack' : 'play';
     }
     case 'draw': case 'take': return entry.n > 0 ? 'draw' : null;
     case 'call': return 'oh-no';
     case 'catch': case 'challenge': return 'call';
-    case 'deal': return 'deal';
+    case 'deal': case 'flip': return 'deal';
     case 'win': return view.matchWinner != null ? 'match-win' : 'win';
     default: return null;
   }
